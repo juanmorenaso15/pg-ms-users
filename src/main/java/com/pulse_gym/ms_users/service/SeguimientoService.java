@@ -141,4 +141,24 @@ public class SeguimientoService {
         return dto;
     }
 
+    /**
+     * Convierte una entidad DetalleSesionEjercicio a DetalleSesionResponseDTO
+     * 
+     * @param detalle Entidad a convertir
+     * @return DTO del detalle de sesión
+     */
+    private DetalleSesionResponseDTO convertirDetalleAResponseDTO(DetalleSesionEjercicio detalle) {
+        DetalleSesionResponseDTO dto = new DetalleSesionResponseDTO();
+        dto.setIdDetalleSesion(detalle.getIdDetalleSesion());
+        dto.setIdDetalleRutina(detalle.getDetalleRutina().getIdDetalleRutina());
+        dto.setNombreEjercicio(detalle.getDetalleRutina().getEjercicio().getNombre());
+        dto.setGrupoMuscular(detalle.getDetalleRutina().getEjercicio().getGrupoMuscular());
+        dto.setSeriesCompletadas(detalle.getSeriesCompletadas());
+        dto.setRepeticionesRealizadas(detalle.getRepeticionesRealizadas());
+        dto.setPesoUsado(detalle.getPesoUsado());
+        dto.setEstado(detalle.getEstado());
+        dto.setObservaciones(detalle.getObservaciones());
+        return dto;
+    }
+
 }
