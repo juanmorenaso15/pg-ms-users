@@ -1,5 +1,6 @@
 package com.pulse_gym.ms_users.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -315,4 +316,51 @@ public class SeguimientoService {
         long dias = java.time.temporal.ChronoUnit.DAYS.between(ultimaSesion, LocalDateTime.now());
         return (int) Math.max(dias, 0);
     }
+
+    /**
+     * Calcula la evolución de cargas de un socio basado en el peso usado en los
+     * ejercicios
+     * 
+     * @param idSocio ID del socio
+     * @return Estado de evolución (PROGRESO, RETROCESO, ESTANCADO)
+     */
+    private String calcularEvolucionCargas(Long idSocio) {
+        List<DetalleSesionEjercicio> detalles = detalleSesionRepository.findDetallesBySocio(idSocio);
+        if (detalles.isEmpty()) {
+            return "ESTANCADO";
+        }
+
+        Map<Long, List<DetalleSesionEjercicio>> agrupado = detalles.stream()
+                .collect(Collectors.groupingBy(d -> d.getDetalleRutina().getEjercicio().getIdEjercicio()));
+
+        int progresos = 0;
+        int retrocesos = 0;
+        int estancados = 0;
+
+        for (List<DetalleSesionEjercicio> lista : agrupado.values()) {
+            lista.sort((a, b) -> b.getSesion().getFechaSesion().compareTo(a.getSesion().getFechaSesion()));
+            if (lista.size() >= 2) {
+                BigDecimal pesoReciente = lista.get(0).getPesoUsado() != null ? lista.get(0).getPesoUsado()
+                        : BigDecimal.ZERO;
+                BigDecimal pesoAnterior = lista.get(1).getPesoUsado() != null ? lista.get(1).getPesoUsado()
+                        : BigDecimal.ZERO;
+                int comp = pesoReciente.compareTo(pesoAnterior);
+                if (comp > 0)
+                    progresos++;
+                else if (comp < 0)
+                    retrocesos++;
+                else
+                    estancados++;
+            }
+        }
+
+        if (progresos > retrocesos && progresos > estancados) {
+            return "PROGRESO";
+        } else if (retrocesos > progresos && retrocesos > estancados) {
+            return "RETROCESO";
+        } else {
+            return "ESTANCADO";
+        }
+    }
+
 }
