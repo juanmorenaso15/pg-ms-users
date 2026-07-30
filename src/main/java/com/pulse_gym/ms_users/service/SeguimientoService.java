@@ -1,8 +1,12 @@
 package com.pulse_gym.ms_users.service;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.springframework.stereotype.Service;
 
 import com.pulse_gym.lb_common.dto.DetalleEjercicioSesionDTO;
+import com.pulse_gym.lb_common.dto.DetalleSesionResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
 import com.pulse_gym.lb_common.dto.SesionResponseDTO;
 import com.pulse_gym.lb_common.entity.user.DetalleRutina;
@@ -105,6 +109,36 @@ public class SeguimientoService {
         }
 
         return convertirAResponseDTO(sesion);
+    }
+
+    /**
+     * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
+     * 
+     * @param sesion Entidad a convertir
+     * @return DTO de la sesión
+     */
+    private SesionResponseDTO convertirAResponseDTO(SesionEntrenamiento sesion) {
+        SesionResponseDTO dto = new SesionResponseDTO();
+        dto.setIdSesion(sesion.getIdSesion());
+        dto.setIdSocio(sesion.getSocio().getIdUsuario());
+        dto.setNombreSocio(sesion.getSocio().getNombre() + " " + sesion.getSocio().getApellido());
+        if (sesion.getRutina() != null) {
+            dto.setIdRutina(sesion.getRutina().getIdRutinaIa());
+            dto.setNombreRutina(
+                    sesion.getRutina().getObjetivo() != null ? sesion.getRutina().getObjetivo() : "Rutina IA");
+        }
+        dto.setFechaSesion(sesion.getFechaSesion());
+        dto.setDuracionMinutos(sesion.getDuracionMinutos());
+        dto.setEstado(sesion.getEstado());
+
+        List<DetalleSesionEjercicio> detalles = detalleSesionRepository
+                .findBySesion_IdSesionOrderByIdDetalleSesionAsc(sesion.getIdSesion());
+
+        List<DetalleSesionResponseDTO> detallesDTO = detalles.stream()
+                .map(this::convertirDetalleAResponseDTO)
+                .collect(Collectors.toList());
+        dto.setDetalles(detallesDTO);
+        return dto;
     }
 
 }
