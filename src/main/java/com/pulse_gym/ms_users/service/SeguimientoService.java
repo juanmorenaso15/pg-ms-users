@@ -1,11 +1,13 @@
 package com.pulse_gym.ms_users.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -14,7 +16,9 @@ import com.pulse_gym.lb_common.dto.DashboardMonitoreoEntrenadorDTO;
 import com.pulse_gym.lb_common.dto.DashboardProgresoSocioDTO;
 import com.pulse_gym.lb_common.dto.DetalleEjercicioSesionDTO;
 import com.pulse_gym.lb_common.dto.DetalleSesionResponseDTO;
+import com.pulse_gym.lb_common.dto.EvolucionEjercicioDTO;
 import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
+import com.pulse_gym.lb_common.dto.ResumenSocioDTO;
 import com.pulse_gym.lb_common.dto.SesionResponseDTO;
 import com.pulse_gym.lb_common.entity.user.DetalleRutina;
 import com.pulse_gym.lb_common.entity.user.DetalleSesionEjercicio;
@@ -286,19 +290,10 @@ public class SeguimientoService {
         ResumenSocioDTO resumen = new ResumenSocioDTO();
         resumen.setIdSocio(socio.getIdUsuario());
         resumen.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
-
-        Double cumplimiento = calcularCumplimientoSemanal(socio.getIdUsuario());
-        resumen.setPorcentajeCumplimiento(cumplimiento != null ? cumplimiento : 0.0);
-
-        Integer racha = calcularRachaDias(socio.getIdUsuario());
-        resumen.setRachaActual(racha != null ? racha : 0);
-
-        Integer diasSinEntrenar = calcularDiasSinEntrenar(socio.getIdUsuario());
-        resumen.setDiasSinEntrenar(diasSinEntrenar != null ? diasSinEntrenar : 0);
-
-        String evolucion = calcularEvolucionCargas(socio.getIdUsuario());
-        resumen.setEstadoEvolucionCargas(evolucion != null ? evolucion : "ESTANCADO");
-
+        resumen.setPorcentajeCumplimiento(calcularCumplimientoSemanal(socio.getIdUsuario()));
+        resumen.setRachaActual(calcularRachaDias(socio.getIdUsuario()));
+        resumen.setDiasSinEntrenar(calcularDiasSinEntrenar(socio.getIdUsuario()));
+        resumen.setEstadoEvolucionCargas(calcularEvolucionCargas(socio.getIdUsuario()));
         return resumen;
     }
 
@@ -310,11 +305,10 @@ public class SeguimientoService {
      */
     private Integer calcularDiasSinEntrenar(Long idSocio) {
         List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
-        if (sesiones.isEmpty()) {
+        if (sesiones.isEmpty())
             return 30;
-        }
-        LocalDateTime ultimaSesion = sesiones.get(0).getFechaSesion();
-        long dias = java.time.temporal.ChronoUnit.DAYS.between(ultimaSesion, LocalDateTime.now());
+        LocalDateTime ultima = sesiones.get(0).getFechaSesion();
+        long dias = java.time.temporal.ChronoUnit.DAYS.between(ultima, LocalDateTime.now());
         return (int) Math.max(dias, 0);
     }
 
@@ -327,25 +321,21 @@ public class SeguimientoService {
      */
     private String calcularEvolucionCargas(Long idSocio) {
         List<DetalleSesionEjercicio> detalles = detalleSesionRepository.findDetallesBySocio(idSocio);
-        if (detalles.isEmpty()) {
+        if (detalles.isEmpty())
             return "ESTANCADO";
-        }
 
         Map<Long, List<DetalleSesionEjercicio>> agrupado = detalles.stream()
                 .collect(Collectors.groupingBy(d -> d.getDetalleRutina().getEjercicio().getIdEjercicio()));
 
-        int progresos = 0;
-        int retrocesos = 0;
-        int estancados = 0;
-
+        int progresos = 0, retrocesos = 0, estancados = 0;
         for (List<DetalleSesionEjercicio> lista : agrupado.values()) {
             lista.sort((a, b) -> b.getSesion().getFechaSesion().compareTo(a.getSesion().getFechaSesion()));
             if (lista.size() >= 2) {
-                BigDecimal pesoReciente = lista.get(0).getPesoUsado() != null ? lista.get(0).getPesoUsado()
+                BigDecimal reciente = lista.get(0).getPesoUsado() != null ? lista.get(0).getPesoUsado()
                         : BigDecimal.ZERO;
-                BigDecimal pesoAnterior = lista.get(1).getPesoUsado() != null ? lista.get(1).getPesoUsado()
+                BigDecimal anterior = lista.get(1).getPesoUsado() != null ? lista.get(1).getPesoUsado()
                         : BigDecimal.ZERO;
-                int comp = pesoReciente.compareTo(pesoAnterior);
+                int comp = reciente.compareTo(anterior);
                 if (comp > 0)
                     progresos++;
                 else if (comp < 0)
@@ -354,14 +344,12 @@ public class SeguimientoService {
                     estancados++;
             }
         }
-
-        if (progresos > retrocesos && progresos > estancados) {
+        if (progresos > retrocesos && progresos > estancados)
             return "PROGRESO";
-        } else if (retrocesos > progresos && retrocesos > estancados) {
+        else if (retrocesos > progresos && retrocesos > estancados)
             return "RETROCESO";
-        } else {
+        else
             return "ESTANCADO";
-        }
     }
 
     /**
@@ -372,9 +360,9 @@ public class SeguimientoService {
      */
     private Double calcularCumplimientoSemanal(Long idSocio) {
         LocalDateTime inicioSemana = LocalDateTime.now().minusDays(7);
-        Long sesionesActual = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemana);
+        Long sesiones = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemana);
         double meta = 3.0;
-        double cumplimiento = Math.min((sesionesActual / meta) * 100, 100.0);
+        double cumplimiento = Math.min((sesiones / meta) * 100, 100.0);
         return Math.round(cumplimiento * 10.0) / 10.0;
     }
 
@@ -385,12 +373,11 @@ public class SeguimientoService {
      * @return Porcentaje de cumplimiento de la semana anterior (0-100)
      */
     private Double calcularCumplimientoSemanaAnterior(Long idSocio) {
-        LocalDateTime inicioSemanaAnterior = LocalDateTime.now().minusDays(14);
-        LocalDateTime finSemanaAnterior = LocalDateTime.now().minusDays(7);
-        Long sesionesAnterior = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemanaAnterior,
-                finSemanaAnterior);
+        LocalDateTime inicio = LocalDateTime.now().minusDays(14);
+        LocalDateTime fin = LocalDateTime.now().minusDays(7);
+        Long sesiones = sesionRepository.countSesionesEnPeriodo(idSocio, inicio, fin);
         double meta = 3.0;
-        double cumplimiento = Math.min((sesionesAnterior / meta) * 100, 100.0);
+        double cumplimiento = Math.min((sesiones / meta) * 100, 100.0);
         return Math.round(cumplimiento * 10.0) / 10.0;
     }
 
@@ -409,10 +396,8 @@ public class SeguimientoService {
                 .collect(Collectors.groupingBy(d -> d.getDetalleRutina().getEjercicio().getIdEjercicio()));
 
         List<EvolucionEjercicioDTO> evoluciones = new ArrayList<>();
-        for (Map.Entry<Long, List<DetalleSesionEjercicio>> entry : agrupado.entrySet()) {
-            List<DetalleSesionEjercicio> lista = entry.getValue();
+        for (List<DetalleSesionEjercicio> lista : agrupado.values()) {
             lista.sort((a, b) -> b.getSesion().getFechaSesion().compareTo(a.getSesion().getFechaSesion()));
-
             if (lista.size() >= 2) {
                 BigDecimal pesoReciente = lista.get(0).getPesoUsado() != null ? lista.get(0).getPesoUsado()
                         : BigDecimal.ZERO;
@@ -422,13 +407,12 @@ public class SeguimientoService {
                 EvolucionEjercicioDTO evo = new EvolucionEjercicioDTO();
                 evo.setNombreEjercicio(lista.get(0).getDetalleRutina().getEjercicio().getNombre());
                 int comp = pesoReciente.compareTo(pesoAnterior);
-                if (comp > 0) {
+                if (comp > 0)
                     evo.setEstado("PROGRESO");
-                } else if (comp < 0) {
+                else if (comp < 0)
                     evo.setEstado("RETROCESO");
-                } else {
+                else
                     evo.setEstado("ESTANCADO");
-                }
                 evo.setProgreso(pesoReciente);
                 evoluciones.add(evo);
             }
@@ -448,4 +432,30 @@ public class SeguimientoService {
             return 0.0;
         return sesiones.stream().mapToInt(SesionEntrenamiento::getDuracionMinutos).average().orElse(0.0);
     }
+
+    /**
+     * Calcula la racha de días consecutivos entrenando de un socio
+     * 
+     * @param idSocio ID del socio
+     * @return Número de días consecutivos entrenando
+     */
+    private Integer calcularRachaDias(Long idSocio) {
+        LocalDateTime fechaLimite = LocalDateTime.now().minusDays(30);
+        List<SesionEntrenamiento> sesiones = sesionRepository.findSesionesDesdeFecha(idSocio, fechaLimite);
+        if (sesiones.isEmpty())
+            return 0;
+
+        Set<LocalDate> fechasConSesion = sesiones.stream()
+                .map(s -> s.getFechaSesion().toLocalDate())
+                .collect(Collectors.toSet());
+
+        int racha = 0;
+        LocalDate fechaActual = LocalDate.now();
+        while (fechasConSesion.contains(fechaActual)) {
+            racha++;
+            fechaActual = fechaActual.minusDays(1);
+        }
+        return racha;
+    }
+
 }
