@@ -2,6 +2,18 @@ package com.pulse_gym.ms_users.service;
 
 import org.springframework.stereotype.Service;
 
+import com.pulse_gym.lb_common.dto.DetalleEjercicioSesionDTO;
+import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
+import com.pulse_gym.lb_common.dto.SesionResponseDTO;
+import com.pulse_gym.lb_common.entity.user.DetalleRutina;
+import com.pulse_gym.lb_common.entity.user.DetalleSesionEjercicio;
+import com.pulse_gym.lb_common.entity.user.RutinaIA;
+import com.pulse_gym.lb_common.entity.user.SesionEntrenamiento;
+import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
+import com.pulse_gym.lb_common.enums.EnumEstadoEjecucionEjercicio;
+import com.pulse_gym.lb_common.enums.EnumEstadoSesion;
+import com.pulse_gym.lb_common.enums.EnumRol;
+import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.repository.DetalleRutinaRepository;
 import com.pulse_gym.ms_users.repository.DetalleSesionEjercicioRepository;
 import com.pulse_gym.ms_users.repository.EntrenadorSocioRepository;
@@ -9,6 +21,7 @@ import com.pulse_gym.ms_users.repository.RutinaRepository;
 import com.pulse_gym.ms_users.repository.SesionEntrenamientoRepository;
 import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,4 +47,55 @@ public class SeguimientoService {
 
     /** Repositorio de asignaciones entrenador-socio */
     private final EntrenadorSocioRepository entrenadorSocioRepository;
+
+    @Transactional
+    public SesionResponseDTO registrarSesion(RegistroSesionRequestDTO request,
+            String userRol, String userEmail) {
+        // Validar rol
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden registrar sesiones");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
+        if (!socio.getIdUsuario().equals(request.getIdSocio())) {
+            throw new SecurityAuthorizationException("No puede registrar sesiones para otro socio");
+        }
+
+        SesionEntrenamiento sesion = new SesionEntrenamiento();
+        sesion.setSocio(socio);
+
+        if (request.getIdRutina() != null) {
+            RutinaIA rutina = rutinaRepository.findById(request.getIdRutina())
+                    .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
+            sesion.setRutina(rutina);
+        }
+
+        sesion.setDuracionMinutos(request.getDuracionMinutos());
+
+        sesion.setEstado(EnumEstadoSesion.COMPLETADA);
+        sesion.setObservaciones(request.getObservaciones());
+        sesion = sesionRepository.save(sesion);
+
+        if (request.getDetalles() != null) {
+            for (DetalleEjercicioSesionDTO detalleDTO : request.getDetalles()) {
+                DetalleRutina detalleRutina = detalleRutinaRepository.findById(detalleDTO.getIdDetalleRutina())
+                        .orElseThrow(() -> new RuntimeException("Detalle de rutina no encontrado"));
+
+                DetalleSesionEjercicio detalle = new DetalleSesionEjercicio();
+                detalle.setSesion(sesion);
+                detalle.setDetalleRutina(detalleRutina);
+                detalle.setSeriesCompletadas(detalleDTO.getSeriesCompletadas());
+                detalle.setRepeticionesRealizadas(detalleDTO.getRepeticionesRealizadas());
+                detalle.setPesoUsado(detalleDTO.getPesoUsado());
+                detalle.setEstado(detalleDTO.getEstado() != null ? detalleDTO.getEstado()
+                        : EnumEstadoEjecucionEjercicio.COMPLETADO);
+                detalle.setObservaciones(detalleDTO.getObservaciones());
+                detalleSesionRepository.save(detalle);
+            }
+        }
+
+        return convertirAResponseDTO(sesion);
+    }
+
 }
