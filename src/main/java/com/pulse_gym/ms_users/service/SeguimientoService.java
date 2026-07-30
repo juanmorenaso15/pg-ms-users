@@ -124,20 +124,21 @@ public class SeguimientoService {
      */
     @Transactional
     public SesionResponseDTO registrarSesion(RegistroSesionRequestDTO request,
-            String userRol, String userEmail) {
-        // Validar rol
+            String userRol,
+            String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo los socios pueden registrar sesiones");
         }
 
-        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
-        if (!socio.getIdUsuario().equals(request.getIdSocio())) {
+        UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        if (!socioAutenticado.getIdUsuario().equals(request.getIdSocio())) {
             throw new SecurityAuthorizationException("No puede registrar sesiones para otro socio");
         }
 
         SesionEntrenamiento sesion = new SesionEntrenamiento();
-        sesion.setSocio(socio);
+        sesion.setSocio(socioAutenticado);
 
         if (request.getIdRutina() != null) {
             RutinaIA rutina = rutinaRepository.findById(request.getIdRutina())
@@ -146,7 +147,6 @@ public class SeguimientoService {
         }
 
         sesion.setDuracionMinutos(request.getDuracionMinutos());
-
         sesion.setEstado(EnumEstadoSesion.COMPLETADA);
         sesion.setObservaciones(request.getObservaciones());
         sesion = sesionRepository.save(sesion);
