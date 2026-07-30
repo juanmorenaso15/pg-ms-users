@@ -48,6 +48,15 @@ public class SeguimientoService {
     /** Repositorio de asignaciones entrenador-socio */
     private final EntrenadorSocioRepository entrenadorSocioRepository;
 
+    /**
+     * 
+     * Registra una sesión de entrenamiento realizada por un socio
+     * 
+     * @param request   Datos de la sesión a registrar
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return DTO con la sesión registrada
+     */
     @Transactional
     public SesionResponseDTO registrarSesion(RegistroSesionRequestDTO request,
             String userRol, String userEmail) {
