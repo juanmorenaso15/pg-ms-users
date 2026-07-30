@@ -53,6 +53,56 @@ public class SeguimientoService {
     private final EntrenadorSocioRepository entrenadorSocioRepository;
 
     /**
+     * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
+     * 
+     * @param sesion Entidad a convertir
+     * @return DTO de la sesión
+     */
+    private SesionResponseDTO convertirAResponseDTO(SesionEntrenamiento sesion) {
+        SesionResponseDTO dto = new SesionResponseDTO();
+        dto.setIdSesion(sesion.getIdSesion());
+        dto.setIdSocio(sesion.getSocio().getIdUsuario());
+        dto.setNombreSocio(sesion.getSocio().getNombre() + " " + sesion.getSocio().getApellido());
+        if (sesion.getRutina() != null) {
+            dto.setIdRutina(sesion.getRutina().getIdRutinaIa());
+            dto.setNombreRutina(
+                    sesion.getRutina().getObjetivo() != null ? sesion.getRutina().getObjetivo() : "Rutina IA");
+        }
+        dto.setFechaSesion(sesion.getFechaSesion());
+        dto.setDuracionMinutos(sesion.getDuracionMinutos());
+        dto.setEstado(sesion.getEstado());
+
+        List<DetalleSesionEjercicio> detalles = detalleSesionRepository
+                .findBySesion_IdSesionOrderByIdDetalleSesionAsc(sesion.getIdSesion());
+
+        List<DetalleSesionResponseDTO> detallesDTO = detalles.stream()
+                .map(this::convertirDetalleAResponseDTO)
+                .collect(Collectors.toList());
+        dto.setDetalles(detallesDTO);
+        return dto;
+    }
+
+    /**
+     * Convierte una entidad DetalleSesionEjercicio a DetalleSesionResponseDTO
+     * 
+     * @param detalle Entidad a convertir
+     * @return DTO del detalle de sesión
+     */
+    private DetalleSesionResponseDTO convertirDetalleAResponseDTO(DetalleSesionEjercicio detalle) {
+        DetalleSesionResponseDTO dto = new DetalleSesionResponseDTO();
+        dto.setIdDetalleSesion(detalle.getIdDetalleSesion());
+        dto.setIdDetalleRutina(detalle.getDetalleRutina().getIdDetalleRutina());
+        dto.setNombreEjercicio(detalle.getDetalleRutina().getEjercicio().getNombre());
+        dto.setGrupoMuscular(detalle.getDetalleRutina().getEjercicio().getGrupoMuscular());
+        dto.setSeriesCompletadas(detalle.getSeriesCompletadas());
+        dto.setRepeticionesRealizadas(detalle.getRepeticionesRealizadas());
+        dto.setPesoUsado(detalle.getPesoUsado());
+        dto.setEstado(detalle.getEstado());
+        dto.setObservaciones(detalle.getObservaciones());
+        return dto;
+    }
+
+    /**
      * 
      * Registra una sesión de entrenamiento realizada por un socio
      * 
@@ -109,56 +159,6 @@ public class SeguimientoService {
         }
 
         return convertirAResponseDTO(sesion);
-    }
-
-    /**
-     * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
-     * 
-     * @param sesion Entidad a convertir
-     * @return DTO de la sesión
-     */
-    private SesionResponseDTO convertirAResponseDTO(SesionEntrenamiento sesion) {
-        SesionResponseDTO dto = new SesionResponseDTO();
-        dto.setIdSesion(sesion.getIdSesion());
-        dto.setIdSocio(sesion.getSocio().getIdUsuario());
-        dto.setNombreSocio(sesion.getSocio().getNombre() + " " + sesion.getSocio().getApellido());
-        if (sesion.getRutina() != null) {
-            dto.setIdRutina(sesion.getRutina().getIdRutinaIa());
-            dto.setNombreRutina(
-                    sesion.getRutina().getObjetivo() != null ? sesion.getRutina().getObjetivo() : "Rutina IA");
-        }
-        dto.setFechaSesion(sesion.getFechaSesion());
-        dto.setDuracionMinutos(sesion.getDuracionMinutos());
-        dto.setEstado(sesion.getEstado());
-
-        List<DetalleSesionEjercicio> detalles = detalleSesionRepository
-                .findBySesion_IdSesionOrderByIdDetalleSesionAsc(sesion.getIdSesion());
-
-        List<DetalleSesionResponseDTO> detallesDTO = detalles.stream()
-                .map(this::convertirDetalleAResponseDTO)
-                .collect(Collectors.toList());
-        dto.setDetalles(detallesDTO);
-        return dto;
-    }
-
-    /**
-     * Convierte una entidad DetalleSesionEjercicio a DetalleSesionResponseDTO
-     * 
-     * @param detalle Entidad a convertir
-     * @return DTO del detalle de sesión
-     */
-    private DetalleSesionResponseDTO convertirDetalleAResponseDTO(DetalleSesionEjercicio detalle) {
-        DetalleSesionResponseDTO dto = new DetalleSesionResponseDTO();
-        dto.setIdDetalleSesion(detalle.getIdDetalleSesion());
-        dto.setIdDetalleRutina(detalle.getDetalleRutina().getIdDetalleRutina());
-        dto.setNombreEjercicio(detalle.getDetalleRutina().getEjercicio().getNombre());
-        dto.setGrupoMuscular(detalle.getDetalleRutina().getEjercicio().getGrupoMuscular());
-        dto.setSeriesCompletadas(detalle.getSeriesCompletadas());
-        dto.setRepeticionesRealizadas(detalle.getRepeticionesRealizadas());
-        dto.setPesoUsado(detalle.getPesoUsado());
-        dto.setEstado(detalle.getEstado());
-        dto.setObservaciones(detalle.getObservaciones());
-        return dto;
     }
 
 }
