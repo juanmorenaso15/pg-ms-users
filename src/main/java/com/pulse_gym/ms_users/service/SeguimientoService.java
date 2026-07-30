@@ -1,10 +1,13 @@
 package com.pulse_gym.ms_users.service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.pulse_gym.lb_common.dto.DashboardProgresoSocioDTO;
 import com.pulse_gym.lb_common.dto.DetalleEjercicioSesionDTO;
 import com.pulse_gym.lb_common.dto.DetalleSesionResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
@@ -193,6 +196,52 @@ public class SeguimientoService {
 
         List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
         return sesiones.stream().map(this::convertirAResponseDTO).collect(Collectors.toList());
+    }
+
+    /**
+     * Obtiene el dashboard de progreso de un socio con validación de permisos
+     * 
+     * @param idSocio   ID del socio a consultar
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return DTO con el dashboard de progreso del socio
+     */
+    public DashboardProgresoSocioDTO obtenerDashboardSocio(Long idSocio, String userRol, String userEmail) {
+        UsuarioPerfil socio = usuarioRepository.findById(idSocio)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
+
+        if (EnumRol.socio.name().equals(userRol)) {
+            UsuarioPerfil autenticado = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Usuario no autenticado"));
+            if (!socio.getIdUsuario().equals(autenticado.getIdUsuario())) {
+                throw new SecurityAuthorizationException("Solo puede ver su propio dashboard");
+            }
+        } else if (EnumRol.entrenador.name().equals(userRol)) {
+            UsuarioPerfil entrenador = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Entrenador no encontrado"));
+            boolean esAsignado = entrenadorSocioRepository
+                    .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(entrenador.getIdUsuario(), idSocio);
+            if (!esAsignado) {
+                throw new SecurityAuthorizationException("No tiene acceso al dashboard de este socio");
+            }
+        } else if (!EnumRol.administrador.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("No tiene permisos para ver este dashboard");
+        }
+
+        DashboardProgresoSocioDTO dashboard = new DashboardProgresoSocioDTO();
+        dashboard.setIdSocio(idSocio);
+        dashboard.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
+        dashboard.setRachaDiasEntrenando(calcularRachaDias(idSocio));
+        dashboard.setPorcentajeCumplimientoSemanal(calcularCumplimientoSemanal(idSocio));
+        dashboard.setPorcentajeCumplimientoSemanaAnterior(calcularCumplimientoSemanaAnterior(idSocio));
+        dashboard.setEvolucionEjercicios(calcularEvolucionEjercicios(idSocio));
+
+        Map<String, Object> estadisticas = new HashMap<>();
+        estadisticas.put("totalSesiones", sesionRepository.countBySocio_IdUsuario(idSocio));
+        estadisticas.put("promedioDuracion", calcularPromedioDuracion(idSocio));
+        dashboard.setEstadisticas(estadisticas);
+
+        return dashboard;
     }
 
 }
