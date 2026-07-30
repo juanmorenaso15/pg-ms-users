@@ -161,4 +161,38 @@ public class SeguimientoService {
         return convertirAResponseDTO(sesion);
     }
 
+    /**
+     * Obtiene el historial de sesiones de un socio con validación de permisos
+     * 
+     * @param idSocio   ID del socio a consultar
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Lista de sesiones del socio
+     */
+    public List<SesionResponseDTO> obtenerHistorialSesiones(Long idSocio, String userRol, String userEmail) {
+        UsuarioPerfil socio = usuarioRepository.findById(idSocio)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
+
+        if (EnumRol.socio.name().equals(userRol)) {
+            UsuarioPerfil autenticado = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Usuario no autenticado"));
+            if (!socio.getIdUsuario().equals(autenticado.getIdUsuario())) {
+                throw new SecurityAuthorizationException("Solo puede ver su propio historial");
+            }
+        } else if (EnumRol.entrenador.name().equals(userRol)) {
+            UsuarioPerfil entrenador = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Entrenador no encontrado"));
+            boolean esAsignado = entrenadorSocioRepository
+                    .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(entrenador.getIdUsuario(), idSocio);
+            if (!esAsignado) {
+                throw new SecurityAuthorizationException("No tiene acceso al historial de este socio");
+            }
+        } else if (!EnumRol.administrador.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("No tiene permisos para ver este historial");
+        }
+
+        List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
+        return sesiones.stream().map(this::convertirAResponseDTO).collect(Collectors.toList());
+    }
+
 }
