@@ -363,4 +363,34 @@ public class SeguimientoService {
         }
     }
 
+    /**
+     * Calcula el porcentaje de cumplimiento semanal de un socio
+     * 
+     * @param idSocio ID del socio
+     * @return Porcentaje de cumplimiento (0-100)
+     */
+    private Double calcularCumplimientoSemanal(Long idSocio) {
+        LocalDateTime inicioSemana = LocalDateTime.now().minusDays(7);
+        Long sesionesActual = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemana);
+        double meta = 3.0;
+        double cumplimiento = Math.min((sesionesActual / meta) * 100, 100.0);
+        return Math.round(cumplimiento * 10.0) / 10.0;
+    }
+
+    /**
+     * Calcula el porcentaje de cumplimiento de la semana anterior de un socio
+     * 
+     * @param idSocio ID del socio
+     * @return Porcentaje de cumplimiento de la semana anterior (0-100)
+     */
+    private Double calcularCumplimientoSemanaAnterior(Long idSocio) {
+        LocalDateTime inicioSemanaAnterior = LocalDateTime.now().minusDays(14);
+        LocalDateTime finSemanaAnterior = LocalDateTime.now().minusDays(7);
+        Long sesionesAnterior = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemanaAnterior,
+                finSemanaAnterior);
+        double meta = 3.0;
+        double cumplimiento = Math.min((sesionesAnterior / meta) * 100, 100.0);
+        return Math.round(cumplimiento * 10.0) / 10.0;
+    }
+
 }
