@@ -436,4 +436,16 @@ public class SeguimientoService {
         return evoluciones;
     }
 
+    /**
+     * Calcula el promedio de duración de las sesiones de un socio
+     * 
+     * @param idSocio ID del socio
+     * @return Promedio de duración en minutos
+     */
+    private Double calcularPromedioDuracion(Long idSocio) {
+        List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
+        if (sesiones.isEmpty())
+            return 0.0;
+        return sesiones.stream().mapToInt(SesionEntrenamiento::getDuracionMinutos).average().orElse(0.0);
+    }
 }
