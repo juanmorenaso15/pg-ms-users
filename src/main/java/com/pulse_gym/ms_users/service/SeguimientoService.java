@@ -2,6 +2,7 @@ package com.pulse_gym.ms_users.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -391,6 +392,48 @@ public class SeguimientoService {
         double meta = 3.0;
         double cumplimiento = Math.min((sesionesAnterior / meta) * 100, 100.0);
         return Math.round(cumplimiento * 10.0) / 10.0;
+    }
+
+    /**
+     * Calcula la evolución de cada ejercicio de un socio basado en el peso usado
+     * 
+     * @param idSocio ID del socio
+     * @return Lista de evolución por ejercicio
+     */
+    private List<EvolucionEjercicioDTO> calcularEvolucionEjercicios(Long idSocio) {
+        List<DetalleSesionEjercicio> detalles = detalleSesionRepository.findDetallesBySocio(idSocio);
+        if (detalles.isEmpty())
+            return new ArrayList<>();
+
+        Map<Long, List<DetalleSesionEjercicio>> agrupado = detalles.stream()
+                .collect(Collectors.groupingBy(d -> d.getDetalleRutina().getEjercicio().getIdEjercicio()));
+
+        List<EvolucionEjercicioDTO> evoluciones = new ArrayList<>();
+        for (Map.Entry<Long, List<DetalleSesionEjercicio>> entry : agrupado.entrySet()) {
+            List<DetalleSesionEjercicio> lista = entry.getValue();
+            lista.sort((a, b) -> b.getSesion().getFechaSesion().compareTo(a.getSesion().getFechaSesion()));
+
+            if (lista.size() >= 2) {
+                BigDecimal pesoReciente = lista.get(0).getPesoUsado() != null ? lista.get(0).getPesoUsado()
+                        : BigDecimal.ZERO;
+                BigDecimal pesoAnterior = lista.get(1).getPesoUsado() != null ? lista.get(1).getPesoUsado()
+                        : BigDecimal.ZERO;
+
+                EvolucionEjercicioDTO evo = new EvolucionEjercicioDTO();
+                evo.setNombreEjercicio(lista.get(0).getDetalleRutina().getEjercicio().getNombre());
+                int comp = pesoReciente.compareTo(pesoAnterior);
+                if (comp > 0) {
+                    evo.setEstado("PROGRESO");
+                } else if (comp < 0) {
+                    evo.setEstado("RETROCESO");
+                } else {
+                    evo.setEstado("ESTANCADO");
+                }
+                evo.setProgreso(pesoReciente);
+                evoluciones.add(evo);
+            }
+        }
+        return evoluciones;
     }
 
 }
