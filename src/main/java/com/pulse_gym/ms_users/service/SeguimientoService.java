@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.pulse_gym.lb_common.dto.DashboardMonitoreoEntrenadorDTO;
 import com.pulse_gym.lb_common.dto.DashboardProgresoSocioDTO;
 import com.pulse_gym.lb_common.dto.DetalleEjercicioSesionDTO;
 import com.pulse_gym.lb_common.dto.DetalleSesionResponseDTO;
@@ -241,6 +242,35 @@ public class SeguimientoService {
         estadisticas.put("promedioDuracion", calcularPromedioDuracion(idSocio));
         dashboard.setEstadisticas(estadisticas);
 
+        return dashboard;
+    }
+
+    /**
+     * Obtiene el dashboard de monitoreo para entrenadores con sus socios asignados
+     * 
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return DTO con el dashboard de monitoreo
+     */
+    public DashboardMonitoreoEntrenadorDTO obtenerDashboardMonitoreo(String userRol, String userEmail) {
+        if (!EnumRol.entrenador.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo entrenadores pueden acceder a este dashboard");
+        }
+
+        UsuarioPerfil entrenador = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Entrenador no encontrado"));
+
+        DashboardMonitoreoEntrenadorDTO dashboard = new DashboardMonitoreoEntrenadorDTO();
+        dashboard.setIdEntrenador(entrenador.getIdUsuario());
+        dashboard.setNombreEntrenador(entrenador.getNombre() + " " + entrenador.getApellido());
+
+        // Obtener socios activos asignados al entrenador
+        List<UsuarioPerfil> socios = entrenadorSocioRepository.findSociosActivosByEntrenador(entrenador.getIdUsuario());
+        List<ResumenSocioDTO> resumenSocios = socios.stream()
+                .map(socio -> construirResumenSocio(socio))
+                .collect(Collectors.toList());
+
+        dashboard.setSociosAsignados(resumenSocios);
         return dashboard;
     }
 
