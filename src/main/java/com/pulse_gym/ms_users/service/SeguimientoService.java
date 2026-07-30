@@ -264,7 +264,6 @@ public class SeguimientoService {
         dashboard.setIdEntrenador(entrenador.getIdUsuario());
         dashboard.setNombreEntrenador(entrenador.getNombre() + " " + entrenador.getApellido());
 
-        // Obtener socios activos asignados al entrenador
         List<UsuarioPerfil> socios = entrenadorSocioRepository.findSociosActivosByEntrenador(entrenador.getIdUsuario());
         List<ResumenSocioDTO> resumenSocios = socios.stream()
                 .map(socio -> construirResumenSocio(socio))
@@ -274,4 +273,23 @@ public class SeguimientoService {
         return dashboard;
     }
 
+     private ResumenSocioDTO construirResumenSocio(UsuarioPerfil socio) {
+        ResumenSocioDTO resumen = new ResumenSocioDTO();
+        resumen.setIdSocio(socio.getIdUsuario());
+        resumen.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
+
+        Double cumplimiento = calcularCumplimientoSemanal(socio.getIdUsuario());
+        resumen.setPorcentajeCumplimiento(cumplimiento != null ? cumplimiento : 0.0);
+
+        Integer racha = calcularRachaDias(socio.getIdUsuario());
+        resumen.setRachaActual(racha != null ? racha : 0);
+
+        Integer diasSinEntrenar = calcularDiasSinEntrenar(socio.getIdUsuario());
+        resumen.setDiasSinEntrenar(diasSinEntrenar != null ? diasSinEntrenar : 0);
+
+        String evolucion = calcularEvolucionCargas(socio.getIdUsuario());
+        resumen.setEstadoEvolucionCargas(evolucion != null ? evolucion : "ESTANCADO");
+
+        return resumen;
+    }
 }
