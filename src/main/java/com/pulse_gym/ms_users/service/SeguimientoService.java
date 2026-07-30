@@ -1,5 +1,6 @@
 package com.pulse_gym.ms_users.service;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -273,7 +274,13 @@ public class SeguimientoService {
         return dashboard;
     }
 
-     private ResumenSocioDTO construirResumenSocio(UsuarioPerfil socio) {
+    /**
+     * Construye el resumen de un socio para el dashboard del entrenador
+     * 
+     * @param socio Socio a construir el resumen
+     * @return DTO con el resumen del socio
+     */
+    private ResumenSocioDTO construirResumenSocio(UsuarioPerfil socio) {
         ResumenSocioDTO resumen = new ResumenSocioDTO();
         resumen.setIdSocio(socio.getIdUsuario());
         resumen.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
@@ -291,5 +298,21 @@ public class SeguimientoService {
         resumen.setEstadoEvolucionCargas(evolucion != null ? evolucion : "ESTANCADO");
 
         return resumen;
+    }
+
+    /**
+     * Calcula el número de días sin entrenar de un socio
+     * 
+     * @param idSocio ID del socio
+     * @return Número de días sin entrenar
+     */
+    private Integer calcularDiasSinEntrenar(Long idSocio) {
+        List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
+        if (sesiones.isEmpty()) {
+            return 30;
+        }
+        LocalDateTime ultimaSesion = sesiones.get(0).getFechaSesion();
+        long dias = java.time.temporal.ChronoUnit.DAYS.between(ultimaSesion, LocalDateTime.now());
+        return (int) Math.max(dias, 0);
     }
 }
