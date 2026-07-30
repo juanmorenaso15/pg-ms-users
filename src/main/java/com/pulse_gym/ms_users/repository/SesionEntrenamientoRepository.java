@@ -47,4 +47,16 @@ public interface SesionEntrenamientoRepository extends JpaRepository<SesionEntre
      * @return Número total de sesiones
      */
     Long countBySocio_IdUsuario(Long idSocio);
+
+    /**
+     * Cuenta las sesiones de un socio en un período específico
+     * 
+     * @param idSocio     ID del socio
+     * @param fechaInicio Fecha de inicio del período
+     * @param fechaFin    Fecha de fin del período
+     * @return Número de sesiones en el período
+     */
+    @Query("SELECT COUNT(s) FROM SesionEntrenamiento s WHERE s.socio.idUsuario = :idSocio AND s.fechaSesion >= :fechaInicio AND s.fechaSesion < :fechaFin")
+    Long countSesionesEnPeriodo(@Param("idSocio") Long idSocio, @Param("fechaInicio") LocalDateTime fechaInicio,
+            @Param("fechaFin") LocalDateTime fechaFin);
 }
