@@ -13,6 +13,8 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulse_gym.lb_common.dto.DashboardMonitoreoEntrenadorDTO;
 import com.pulse_gym.lb_common.dto.DashboardProgresoSocioDTO;
 import com.pulse_gym.lb_common.dto.DetalleEjercicioSesionDTO;
@@ -581,23 +583,39 @@ public class SeguimientoService {
         if (idRutina != null) {
             rutina = rutinaRepository.findById(idRutina)
                     .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
-
-                    if (!rutina.getSocio().getIdUsuario().equals(idSocio)) {
+            if (!rutina.getSocio().getIdUsuario().equals(idSocio)) {
                 throw new SecurityAuthorizationException("La rutina no pertenece al socio especificado");
             }
         } else {
-
             rutina = rutinaRepository.findRutinaActivaReciente(idSocio)
                     .orElseThrow(() -> new RuntimeException("El socio no tiene una rutina activa"));
+        }
+
+        String descripcion = rutina.getObjetivo() != null ? rutina.getObjetivo()
+                : "Rutina de entrenamiento personalizada";
+        String explicacionIA = rutina.getExplicacionIa();
+
+        if (rutina.getRutinaGenerada() != null && !rutina.getRutinaGenerada().isEmpty()) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode root = mapper.readTree(rutina.getRutinaGenerada());
+
+                if (root.has("descripcion") && !root.get("descripcion").asText().isEmpty()) {
+                    descripcion = root.get("descripcion").asText();
+                }
+                if ((explicacionIA == null || explicacionIA.isEmpty()) && root.has("explicacionIA")) {
+                    explicacionIA = root.get("explicacionIA").asText();
+                }
+            } catch (Exception e) {
+                log.warn("No se pudo parsear el JSON de la rutina: {}", e.getMessage());
+            }
         }
 
         RutinaExportacionDTO exportDTO = new RutinaExportacionDTO();
         exportDTO.setIdRutina(rutina.getIdRutinaIa());
         exportDTO.setNombre(rutina.getObjetivo() != null ? rutina.getObjetivo() : "Rutina de entrenamiento");
-        exportDTO.setDescripcion(rutina.getRutinaGenerada() != null
-                ? rutina.getRutinaGenerada().substring(0, Math.min(200, rutina.getRutinaGenerada().length()))
-                : "Rutina generada por IA");
-        exportDTO.setExplicacionIA(rutina.getExplicacionIa());
+        exportDTO.setDescripcion(descripcion);
+        exportDTO.setExplicacionIA(explicacionIA);
         exportDTO.setNombreSocio(socio.getNombre());
         exportDTO.setApellidoSocio(socio.getApellido());
         exportDTO.setEmailSocio(socio.getEmail());
