@@ -22,6 +22,7 @@ import com.pulse_gym.lb_common.dto.ResumenSocioDTO;
 import com.pulse_gym.lb_common.dto.SesionResponseDTO;
 import com.pulse_gym.lb_common.entity.user.DetalleRutina;
 import com.pulse_gym.lb_common.entity.user.DetalleSesionEjercicio;
+import com.pulse_gym.lb_common.entity.user.EntrenadorSocio;
 import com.pulse_gym.lb_common.entity.user.RutinaIA;
 import com.pulse_gym.lb_common.entity.user.SesionEntrenamiento;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
@@ -113,6 +114,23 @@ public class SeguimientoService {
         return dto;
     }
 
+    private void asignarSocioAEntrenadorSiNoExiste(UsuarioPerfil socio, UsuarioPerfil entrenador) {
+        boolean existe = entrenadorSocioRepository
+                .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(
+                        entrenador.getIdUsuario(),
+                        socio.getIdUsuario());
+
+        if (!existe) {
+            EntrenadorSocio asignacion = new EntrenadorSocio();
+            asignacion.setEntrenador(entrenador);
+            asignacion.setSocio(socio);
+            asignacion.setActiva(true);
+            entrenadorSocioRepository.save(asignacion);
+            log.info("Socio {} asignado automáticamente al entrenador {} al registrar sesión",
+                    socio.getIdUsuario(), entrenador.getIdUsuario());
+        }
+    }
+
     /**
      * 
      * Registra una sesión de entrenamiento realizada por un socio
@@ -140,10 +158,17 @@ public class SeguimientoService {
         SesionEntrenamiento sesion = new SesionEntrenamiento();
         sesion.setSocio(socioAutenticado);
 
+        RutinaIA rutina = null;
         if (request.getIdRutina() != null) {
-            RutinaIA rutina = rutinaRepository.findById(request.getIdRutina())
+            rutina = rutinaRepository.findById(request.getIdRutina())
                     .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
             sesion.setRutina(rutina);
+
+            // 🔥 ASIGNACIÓN AUTOMÁTICA: Si la rutina tiene un entrenador,
+            // asignar el socio a ese entrenador (si no existe la asignación)
+            if (rutina.getEntrenador() != null) {
+                asignarSocioAEntrenadorSiNoExiste(socioAutenticado, rutina.getEntrenador());
+            }
         }
 
         sesion.setDuracionMinutos(request.getDuracionMinutos());
