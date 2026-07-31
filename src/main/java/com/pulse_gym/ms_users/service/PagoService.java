@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -19,7 +20,9 @@ import com.mercadopago.client.preference.PreferenceItemRequest;
 import com.mercadopago.client.preference.PreferenceRequest;
 import com.mercadopago.exceptions.MPApiException;
 import com.mercadopago.resources.preference.Preference;
+import com.pulse_gym.lb_common.client.EventoPagoClient;
 import com.pulse_gym.lb_common.dto.AnularPagoRequestDTO;
+import com.pulse_gym.lb_common.dto.EventoPagoRequestDTO;
 import com.pulse_gym.lb_common.dto.FiltroPagosRequestDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.PagoResponseDTO;
@@ -46,434 +49,454 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class PagoService {
 
-        /** Repositorio para operaciones con pagos */
-        private final PagoRepository pagoRepository;
+    /** Repositorio para operaciones con pagos */
+    private final PagoRepository pagoRepository;
 
-        /** Repositorio para operaciones con membresías asignadas */
-        private final SocioMembresiaRepository socioMembresiaRepository;
+    /** Repositorio para operaciones con membresías asignadas */
+    private final SocioMembresiaRepository socioMembresiaRepository;
 
-        /** Repositorio para operaciones con usuarios */
-        private final UsuarioPerfilRepository usuarioRepository;
+    /** Repositorio para operaciones con usuarios */
+    private final UsuarioPerfilRepository usuarioRepository;
 
-        /** Servicio para generar comprobantes de pago en PDF */
-        private final PagoPDFService pagoPDFService;
+    /** Servicio para generar comprobantes de pago en PDF */
+    private final PagoPDFService pagoPDFService;
 
-        /** Servicio para gestión de membresías de socios */
-        private final SocioMembresiaService socioMembresiaService;
+    /** Servicio para gestión de membresías de socios */
+    private final SocioMembresiaService socioMembresiaService;
 
-        /**
-         * Token de acceso para la integración con la API de MercadoPago, configurado
-         * desde variables de entorno
-         */
-        @Value("${MERCADOPAGO_ACCESS_TOKEN}")
-        private String mpAccessToken;
+    /** Servicio para enviar eventos de pago de manera asíncrona */
+    private final EventoPagoClient eventoPagoClient;
 
-        /**
-         * Convierte una entidad Pago a PagoResponseDTO
-         * 
-         * @param pago Entidad de pago a convertir
-         * @return DTO con los datos del pago
-         */
-        private PagoResponseDTO convertirAResponseDTO(Pago pago) {
-                PagoResponseDTO dto = new PagoResponseDTO();
-                dto.setIdPago(pago.getIdPago());
-                dto.setIdSocio(pago.getSocioMembresia().getSocio().getIdUsuario());
-                dto.setNombreSocio(pago.getSocioMembresia().getSocio().getNombre() + " " +
-                                pago.getSocioMembresia().getSocio().getApellido());
-                dto.setEmailSocio(pago.getSocioMembresia().getSocio().getEmail());
-                dto.setIdSocioMembresia(pago.getSocioMembresia().getIdSocioMembresia());
-                dto.setNombreMembresia(pago.getSocioMembresia().getMembresia().getNombre());
-                dto.setMonto(pago.getMonto());
-                dto.setFechaPago(pago.getFechaPago());
-                dto.setMetodoPago(pago.getMetodoPago().name());
-                dto.setNumeroComprobante(pago.getNumeroComprobante());
+    private final EventoPagoAsyncService eventoPagoAsyncService; // Opcional, si quieres async
 
-                if (pago.getAdminRegistro() != null) {
-                        dto.setIdAdminRegistro(pago.getAdminRegistro().getIdUsuario());
-                        dto.setNombreAdminRegistro(pago.getAdminRegistro().getNombre() + " " +
-                                        pago.getAdminRegistro().getApellido());
-                }
+    /**
+     * Token de acceso para la integración con la API de MercadoPago, configurado
+     * desde variables de entorno
+     */
+    @Value("${MERCADOPAGO_ACCESS_TOKEN}")
+    private String mpAccessToken;
 
-                dto.setObservaciones(pago.getObservaciones());
-                dto.setAnulado(pago.getAnulado());
-                dto.setMotivoAnulacion(pago.getMotivoAnulacion());
-                dto.setFechaAnulacion(pago.getFechaAnulacion());
+    /**
+     * Convierte una entidad Pago a PagoResponseDTO
+     * 
+     * @param pago Entidad de pago a convertir
+     * @return DTO con los datos del pago
+     */
+    private PagoResponseDTO convertirAResponseDTO(Pago pago) {
+        PagoResponseDTO dto = new PagoResponseDTO();
+        dto.setIdPago(pago.getIdPago());
+        dto.setIdSocio(pago.getSocioMembresia().getSocio().getIdUsuario());
+        dto.setNombreSocio(pago.getSocioMembresia().getSocio().getNombre() + " " +
+                pago.getSocioMembresia().getSocio().getApellido());
+        dto.setEmailSocio(pago.getSocioMembresia().getSocio().getEmail());
+        dto.setIdSocioMembresia(pago.getSocioMembresia().getIdSocioMembresia());
+        dto.setNombreMembresia(pago.getSocioMembresia().getMembresia().getNombre());
+        dto.setMonto(pago.getMonto());
+        dto.setFechaPago(pago.getFechaPago());
+        dto.setMetodoPago(pago.getMetodoPago().name());
+        dto.setNumeroComprobante(pago.getNumeroComprobante());
 
-                return dto;
+        if (pago.getAdminRegistro() != null) {
+            dto.setIdAdminRegistro(pago.getAdminRegistro().getIdUsuario());
+            dto.setNombreAdminRegistro(pago.getAdminRegistro().getNombre() + " " +
+                    pago.getAdminRegistro().getApellido());
         }
 
-        /**
-         * Registra un nuevo pago para una membresía asignada a un socio.
-         * Valida que el usuario tenga rol autorizado (admin, entrenador o
-         * recepcionista),
-         * que la membresía asignada exista, que el método de pago sea válido,
-         * que la membresía tenga un precio válido y genera un comprobante automático si
-         * no se proporciona.
-         * 
-         * @param requestDTO        DTO con los datos del pago (idSocioMembresia,
-         *                          metodoPago, numeroComprobante, observaciones)
-         * @param userRol           Rol del usuario autenticado
-         * @param userIdAutenticado ID del usuario que registra el pago
-         * @return Mensaje de confirmación con el socio, monto, método y comprobante
-         */
-        @Transactional
-        public MessegeGlobalDTO registrarPago(RegistrarPagoRequestDTO requestDTO, String userRol,
-                        Long userIdAutenticado) {
-                ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+        dto.setObservaciones(pago.getObservaciones());
+        dto.setAnulado(pago.getAnulado());
+        dto.setMotivoAnulacion(pago.getMotivoAnulacion());
+        dto.setFechaAnulacion(pago.getFechaAnulacion());
 
-                SocioMembresia socioMembresia = socioMembresiaRepository.findById(requestDTO.getIdSocioMembresia())
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Asignación de membresía no encontrada con ID: "
-                                                                + requestDTO.getIdSocioMembresia()));
+        return dto;
+    }
 
-                if (requestDTO.getMetodoPago() == null) {
-                        throw new RuntimeException(
-                                        "Método de pago no válido o ausente. Valores: EFECTIVO, TRANSFERENCIA_BANCOLOMBIA, TARJETA_CREDITO, TARJETA_DEBITO, OTRO");
-                }
+    /**
+     * Registra un nuevo pago para una membresía asignada a un socio.
+     * Valida que el usuario tenga rol autorizado (admin, entrenador o
+     * recepcionista),
+     * que la membresía asignada exista, que el método de pago sea válido,
+     * que la membresía tenga un precio válido y genera un comprobante automático si
+     * no se proporciona.
+     * 
+     * @param requestDTO        DTO con los datos del pago (idSocioMembresia,
+     *                          metodoPago, numeroComprobante, observaciones)
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario que registra el pago
+     * @return Mensaje de confirmación con el socio, monto, método y comprobante
+     */
+    @Transactional
+    public MessegeGlobalDTO registrarPago(RegistrarPagoRequestDTO requestDTO, String userRol,
+            Long userIdAutenticado) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
-                EnumMetodoPago metodoPago = requestDTO.getMetodoPago();
+        SocioMembresia socioMembresia = socioMembresiaRepository.findById(requestDTO.getIdSocioMembresia())
+                .orElseThrow(() -> new RuntimeException(
+                        "Asignación de membresía no encontrada con ID: "
+                                + requestDTO.getIdSocioMembresia()));
 
-                UsuarioPerfil admin = usuarioRepository.findById(userIdAutenticado)
-                                .orElseThrow(() -> new RuntimeException("Usuario administrador no encontrado"));
+        if (requestDTO.getMetodoPago() == null) {
+            throw new RuntimeException(
+                    "Método de pago no válido o ausente. Valores: EFECTIVO, TRANSFERENCIA_BANCOLOMBIA, TARJETA_CREDITO, TARJETA_DEBITO, OTRO");
+        }
 
-                BigDecimal montoMembresia = socioMembresia.getMembresia().getPrecioTotal();
-                if (montoMembresia == null || montoMembresia.compareTo(BigDecimal.ZERO) <= 0) {
-                        throw new RuntimeException("La membresía asociada no tiene un precio válido asignado.");
-                }
+        EnumMetodoPago metodoPago = requestDTO.getMetodoPago();
 
-                String comprobanteFinal = requestDTO.getNumeroComprobante();
+        UsuarioPerfil admin = usuarioRepository.findById(userIdAutenticado)
+                .orElseThrow(() -> new RuntimeException("Usuario administrador no encontrado"));
 
-                if (comprobanteFinal == null || comprobanteFinal.trim().isEmpty()) {
+        BigDecimal montoMembresia = socioMembresia.getMembresia().getPrecioTotal();
+        if (montoMembresia == null || montoMembresia.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("La membresía asociada no tiene un precio válido asignado.");
+        }
 
-                        String codigoUnico = java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-                        comprobanteFinal = "REC-" + codigoUnico;
-                }
+        String comprobanteFinal = requestDTO.getNumeroComprobante();
 
-                Pago pago = new Pago();
-                pago.setSocioMembresia(socioMembresia);
-                pago.setMonto(montoMembresia);
-                pago.setFechaPago(LocalDateTime.now());
-                pago.setMetodoPago(metodoPago);
-                pago.setNumeroComprobante(comprobanteFinal);
-                pago.setAdminRegistro(admin);
-                pago.setObservaciones(requestDTO.getObservaciones());
-                pago.setAnulado(false);
-                pago.setEstado(EnumEstadoPago.APROBADO);
+        if (comprobanteFinal == null || comprobanteFinal.trim().isEmpty()) {
 
-                pagoRepository.save(pago);
+            String codigoUnico = java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            comprobanteFinal = "REC-" + codigoUnico;
+        }
 
+        Pago pago = new Pago();
+        pago.setSocioMembresia(socioMembresia);
+        pago.setMonto(montoMembresia);
+        pago.setFechaPago(LocalDateTime.now());
+        pago.setMetodoPago(metodoPago);
+        pago.setNumeroComprobante(comprobanteFinal);
+        pago.setAdminRegistro(admin);
+        pago.setObservaciones(requestDTO.getObservaciones());
+        pago.setAnulado(false);
+        pago.setEstado(EnumEstadoPago.APROBADO);
+
+        pagoRepository.save(pago);
+
+        enviarEventoPago(pago);
+
+        try {
+            socioMembresiaService.actualizarEstadoMembresiaPorPago(socioMembresia.getIdSocioMembresia());
+        } catch (Exception e) {
+            log.warn("Error al actualizar estado de membresía: {}", e.getMessage());
+        }
+
+        return new MessegeGlobalDTO(String.format(
+                "Pago registrado correctamente. Socio: %s, Monto: $%,.0f, Método: %s, Comprobante: %s",
+                socioMembresia.getSocio().getNombre(),
+                pago.getMonto(),
+                metodoPago.name(),
+                pago.getNumeroComprobante()));
+    }
+
+    /**
+     * Inicia un pago de membresía desde la aplicación móvil integrando con
+     * MercadoPago.
+     * Valida que el usuario sea socio, que la membresía le pertenezca,
+     * que el método de pago no sea efectivo, y genera una preferencia de pago en
+     * MercadoPago.
+     * 
+     * @param requestDTO DTO con los datos del pago (idSocioMembresia, metodoPago)
+     * @param userRol    Rol del usuario autenticado (debe ser socio)
+     * @param userEmail  Email del socio autenticado
+     * @return DTO con el ID de preferencia y URL de pago de MercadoPago
+     */
+    @Transactional
+    public PreferenceResponseDTO iniciarPagoMembresiaApp(RegistrarPagoRequestDTO requestDTO, String userRol,
+            String userEmail) {
+
+        if (requestDTO.getMetodoPago() == EnumMetodoPago.EFECTIVO) {
+            throw new IllegalArgumentException(
+                    "El método de pago en efectivo no está permitido para transacciones desde la aplicación móvil.");
+        }
+
+        ValidacionDeRoles.validarSocio(userRol);
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
+
+        SocioMembresia socioMembresia = socioMembresiaRepository.findById(requestDTO.getIdSocioMembresia())
+                .orElseThrow(() -> new RuntimeException("Asignación de membresía no encontrada"));
+
+        if (!socioMembresia.getSocio().getIdUsuario().equals(socio.getIdUsuario())) {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. No puedes pagar una membresía ajena.");
+        }
+
+        try {
+            PreferenceClient client = new PreferenceClient();
+
+            String tokenFinal = (this.mpAccessToken != null && !this.mpAccessToken.isEmpty())
+                    ? this.mpAccessToken
+                    : "TEST-4168132953531234-061910-c114382583896dfa26bfe218e860956b-272097072";
+
+            MPRequestOptions requestOptions = MPRequestOptions.builder()
+                    .accessToken(tokenFinal.trim())
+                    .build();
+
+            BigDecimal montoMembresia = socioMembresia.getMembresia().getPrecioTotal();
+            if (montoMembresia == null || montoMembresia.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new RuntimeException("La membresía asociada no tiene un precio válido asignado.");
+            }
+            BigDecimal montoFormateado = montoMembresia.setScale(2, RoundingMode.HALF_UP);
+
+            PreferenceItemRequest item = PreferenceItemRequest.builder()
+                    .id(socioMembresia.getIdSocioMembresia().toString())
+                    .title("Pulse GYM - Membresia: " + socioMembresia.getMembresia().getNombre())
+                    .quantity(1)
+                    .unitPrice(montoFormateado)
+                    .currencyId("COP")
+                    .build();
+
+            PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
+                    .success("http://localhost:5500/success.html")
+                    .failure("http://localhost:5500/failure.html")
+                    .pending("http://localhost:5500/pending.html")
+                    .build();
+
+            PreferenceRequest preferenceRequest = PreferenceRequest.builder()
+                    .items(List.of(item))
+                    .backUrls(backUrls)
+                    .externalReference(socioMembresia.getIdSocioMembresia().toString())
+                    .build();
+
+            Preference preference = client.create(preferenceRequest, requestOptions);
+
+            Pago nuevoPago = new Pago();
+            nuevoPago.setSocioMembresia(socioMembresia);
+            nuevoPago.setMonto(montoFormateado);
+            nuevoPago.setFechaPago(LocalDateTime.now());
+            nuevoPago.setMetodoPago(requestDTO.getMetodoPago());
+            nuevoPago.setEstado(EnumEstadoPago.PENDIENTE);
+            nuevoPago.setAnulado(false);
+
+            nuevoPago.setNumeroComprobante(preference.getId());
+
+            pagoRepository.save(nuevoPago);
+
+            enviarEventoPago(nuevoPago);
+
+            return new PreferenceResponseDTO(preference.getId(), preference.getSandboxInitPoint());
+
+        } catch (MPApiException apiException) {
+            System.err.println("=== ERROR DETALLADO DE MERCADO PAGO ===");
+            System.err.println("Status Código: " + apiException.getStatusCode());
+            System.err.println("Cuerpo de Respuesta de MP: " + apiException.getApiResponse().getContent());
+            System.err.println("=======================================");
+            throw new RuntimeException("Mercado Pago falló: " + apiException.getApiResponse().getContent());
+        } catch (Exception e) {
+            throw new RuntimeException("Error general al inicializar pago: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Consulta el historial de pagos de un socio con validación de permisos
+     * 
+     * @param idSocio           ID del socio a consultar
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @param userEmail         Email del usuario autenticado
+     * @return Lista de pagos del socio
+     * @throws SecurityAuthorizationException Si el usuario no tiene permisos
+     * @throws RuntimeException               Si no se encuentra el socio o no tiene
+     *                                        pagos
+     */
+    @Transactional(readOnly = true)
+    public List<PagoResponseDTO> consultarHistorialPagos(Long idSocio, String userRol, Long userIdAutenticado,
+            String userEmail) {
+
+        if (userRol.equals(EnumRol.socio.name())) {
+            UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Socio autenticado no encontrado con email: " + userEmail));
+
+            UsuarioPerfil socioConsultado = usuarioRepository.findById(idSocio)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Socio no encontrado con ID: " + idSocio));
+
+            if (!socioAutenticado.getEmail().equals(socioConsultado.getEmail())) {
+                throw new SecurityAuthorizationException(
+                        "Acceso denegado. Solo puede consultar su propio historial. Tu email: "
+                                +
+                                socioAutenticado.getEmail() + ", consultado: "
+                                + socioConsultado.getEmail());
+            }
+        } else if (!userRol.equals(EnumRol.administrador.name())
+                && !userRol.equals(EnumRol.recepcionista.name())) {
+            throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado: " + userRol);
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findById(idSocio)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + idSocio));
+
+        List<Pago> pagos = pagoRepository.findBySocioId(idSocio);
+
+        if (pagos.isEmpty()) {
+            throw new RuntimeException("El socio " + socio.getNombre() + " no tiene pagos registrados");
+        }
+
+        return pagos.stream()
+                .map(this::convertirAResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Filtra pagos aplicando criterios de búsqueda
+     * 
+     * @param filtro  DTO con los filtros a aplicar
+     * @param userRol Rol del usuario autenticado
+     * @return Lista de pagos que coinciden con los filtros
+     * @throws RuntimeException Si no se encuentran pagos
+     */
+    @Transactional(readOnly = true)
+    public List<PagoResponseDTO> filtrarPagos(FiltroPagosRequestDTO filtro, String userRol) {
+        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+
+        Specification<Pago> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (filtro.getIdSocio() != null) {
+                predicates.add(cb.equal(root.get("socioMembresia").get("socio").get("idUsuario"),
+                        filtro.getIdSocio()));
+            }
+
+            if (filtro.getMetodoPago() != null && !filtro.getMetodoPago().isEmpty()) {
                 try {
-                        socioMembresiaService.actualizarEstadoMembresiaPorPago(socioMembresia.getIdSocioMembresia());
-                } catch (Exception e) {
-                        log.warn("Error al actualizar estado de membresía: {}", e.getMessage());
-                }
+                    EnumMetodoPago metodo = EnumMetodoPago
+                            .valueOf(filtro.getMetodoPago().toUpperCase());
+                    predicates.add(cb.equal(root.get("metodoPago"), metodo));
+                } catch (IllegalArgumentException e) {
 
-                return new MessegeGlobalDTO(String.format(
-                                "Pago registrado correctamente. Socio: %s, Monto: $%,.0f, Método: %s, Comprobante: %s",
-                                socioMembresia.getSocio().getNombre(),
-                                pago.getMonto(),
-                                metodoPago.name(),
-                                pago.getNumeroComprobante()));
+                }
+            }
+
+            if (filtro.getAnulado() != null) {
+                predicates.add(cb.equal(root.get("anulado"), filtro.getAnulado()));
+            }
+
+            if (filtro.getFechaInicio() != null && filtro.getFechaFin() != null) {
+                predicates.add(cb.between(root.get("fechaPago"), filtro.getFechaInicio(),
+                        filtro.getFechaFin()));
+            } else if (filtro.getFechaInicio() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("fechaPago"), filtro.getFechaInicio()));
+            } else if (filtro.getFechaFin() != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("fechaPago"), filtro.getFechaFin()));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        List<Pago> pagos = pagoRepository.findAll(spec);
+
+        if (pagos.isEmpty()) {
+            throw new RuntimeException("No se encontraron pagos con los filtros aplicados");
         }
 
-        /**
-         * Inicia un pago de membresía desde la aplicación móvil integrando con
-         * MercadoPago.
-         * Valida que el usuario sea socio, que la membresía le pertenezca,
-         * que el método de pago no sea efectivo, y genera una preferencia de pago en
-         * MercadoPago.
-         * 
-         * @param requestDTO DTO con los datos del pago (idSocioMembresia, metodoPago)
-         * @param userRol    Rol del usuario autenticado (debe ser socio)
-         * @param userEmail  Email del socio autenticado
-         * @return DTO con el ID de preferencia y URL de pago de MercadoPago
-         */
-        @Transactional
-        public PreferenceResponseDTO iniciarPagoMembresiaApp(RegistrarPagoRequestDTO requestDTO, String userRol,
-                        String userEmail) {
+        return pagos.stream()
+                .map(this::convertirAResponseDTO)
+                .collect(Collectors.toList());
+    }
 
-                if (requestDTO.getMetodoPago() == EnumMetodoPago.EFECTIVO) {
-                        throw new IllegalArgumentException(
-                                        "El método de pago en efectivo no está permitido para transacciones desde la aplicación móvil.");
-                }
+    /**
+     * Anula un pago existente
+     * 
+     * @param requestDTO DTO con el ID del pago y motivo de anulación
+     * @param userRol    Rol del usuario autenticado
+     * @return Mensaje de confirmación de la anulación
+     * @throws RuntimeException Si el pago no existe o ya está anulado
+     */
+    @Transactional
+    public MessegeGlobalDTO anularPago(AnularPagoRequestDTO requestDTO, String userRol) {
+        ValidacionDeRoles.validarAdminORecepcionista(userRol);
 
-                ValidacionDeRoles.validarSocio(userRol);
+        Pago pago = pagoRepository.findById(requestDTO.getIdPago())
+                .orElseThrow(() -> new RuntimeException(
+                        "Pago no encontrado con ID: " + requestDTO.getIdPago()));
 
-                UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
-                                .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
-
-                SocioMembresia socioMembresia = socioMembresiaRepository.findById(requestDTO.getIdSocioMembresia())
-                                .orElseThrow(() -> new RuntimeException("Asignación de membresía no encontrada"));
-
-                if (!socioMembresia.getSocio().getIdUsuario().equals(socio.getIdUsuario())) {
-                        throw new SecurityAuthorizationException(
-                                        "Acceso denegado. No puedes pagar una membresía ajena.");
-                }
-
-                try {
-                        PreferenceClient client = new PreferenceClient();
-
-                        String tokenFinal = (this.mpAccessToken != null && !this.mpAccessToken.isEmpty())
-                                        ? this.mpAccessToken
-                                        : "TEST-4168132953531234-061910-c114382583896dfa26bfe218e860956b-272097072";
-
-                        MPRequestOptions requestOptions = MPRequestOptions.builder()
-                                        .accessToken(tokenFinal.trim())
-                                        .build();
-
-                        BigDecimal montoMembresia = socioMembresia.getMembresia().getPrecioTotal();
-                        if (montoMembresia == null || montoMembresia.compareTo(BigDecimal.ZERO) <= 0) {
-                                throw new RuntimeException("La membresía asociada no tiene un precio válido asignado.");
-                        }
-                        BigDecimal montoFormateado = montoMembresia.setScale(2, RoundingMode.HALF_UP);
-
-                        PreferenceItemRequest item = PreferenceItemRequest.builder()
-                                        .id(socioMembresia.getIdSocioMembresia().toString())
-                                        .title("Pulse GYM - Membresia: " + socioMembresia.getMembresia().getNombre())
-                                        .quantity(1)
-                                        .unitPrice(montoFormateado)
-                                        .currencyId("COP")
-                                        .build();
-
-                        PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
-                                        .success("http://localhost:5500/success.html")
-                                        .failure("http://localhost:5500/failure.html")
-                                        .pending("http://localhost:5500/pending.html")
-                                        .build();
-
-                        PreferenceRequest preferenceRequest = PreferenceRequest.builder()
-                                        .items(List.of(item))
-                                        .backUrls(backUrls)
-                                        .externalReference(socioMembresia.getIdSocioMembresia().toString())
-                                        .build();
-
-                        Preference preference = client.create(preferenceRequest, requestOptions);
-
-                        Pago nuevoPago = new Pago();
-                        nuevoPago.setSocioMembresia(socioMembresia);
-                        nuevoPago.setMonto(montoFormateado);
-                        nuevoPago.setFechaPago(LocalDateTime.now());
-                        nuevoPago.setMetodoPago(requestDTO.getMetodoPago());
-                        nuevoPago.setEstado(EnumEstadoPago.PENDIENTE);
-                        nuevoPago.setAnulado(false);
-
-                        nuevoPago.setNumeroComprobante(preference.getId());
-
-                        pagoRepository.save(nuevoPago);
-
-                        return new PreferenceResponseDTO(preference.getId(), preference.getSandboxInitPoint());
-
-                } catch (MPApiException apiException) {
-                        System.err.println("=== ERROR DETALLADO DE MERCADO PAGO ===");
-                        System.err.println("Status Código: " + apiException.getStatusCode());
-                        System.err.println("Cuerpo de Respuesta de MP: " + apiException.getApiResponse().getContent());
-                        System.err.println("=======================================");
-                        throw new RuntimeException("Mercado Pago falló: " + apiException.getApiResponse().getContent());
-                } catch (Exception e) {
-                        throw new RuntimeException("Error general al inicializar pago: " + e.getMessage());
-                }
+        if (pago.isAnulado()) {
+            throw new RuntimeException("Este pago ya está anulado");
         }
 
-        /**
-         * Consulta el historial de pagos de un socio con validación de permisos
-         * 
-         * @param idSocio           ID del socio a consultar
-         * @param userRol           Rol del usuario autenticado
-         * @param userIdAutenticado ID del usuario autenticado
-         * @param userEmail         Email del usuario autenticado
-         * @return Lista de pagos del socio
-         * @throws SecurityAuthorizationException Si el usuario no tiene permisos
-         * @throws RuntimeException               Si no se encuentra el socio o no tiene
-         *                                        pagos
-         */
-        @Transactional(readOnly = true)
-        public List<PagoResponseDTO> consultarHistorialPagos(Long idSocio, String userRol, Long userIdAutenticado,
-                        String userEmail) {
+        pago.setAnulado(true);
+        pago.setFechaAnulacion(LocalDateTime.now());
+        pago.setMotivoAnulacion(requestDTO.getMotivo());
+        pago.setEstado(EnumEstadoPago.ANULADO);
 
-                if (userRol.equals(EnumRol.socio.name())) {
-                        UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
-                                        .orElseThrow(() -> new RuntimeException(
-                                                        "Socio autenticado no encontrado con email: " + userEmail));
+        pagoRepository.save(pago);
 
-                        UsuarioPerfil socioConsultado = usuarioRepository.findById(idSocio)
-                                        .orElseThrow(() -> new RuntimeException(
-                                                        "Socio no encontrado con ID: " + idSocio));
+        return new MessegeGlobalDTO(String.format(
+                "Pago ID: %d anulado correctamente. Motivo: %s",
+                pago.getIdPago(),
+                requestDTO.getMotivo()));
+    }
 
-                        if (!socioAutenticado.getEmail().equals(socioConsultado.getEmail())) {
-                                throw new SecurityAuthorizationException(
-                                                "Acceso denegado. Solo puede consultar su propio historial. Tu email: "
-                                                                +
-                                                                socioAutenticado.getEmail() + ", consultado: "
-                                                                + socioConsultado.getEmail());
-                        }
-                } else if (!userRol.equals(EnumRol.administrador.name())
-                                && !userRol.equals(EnumRol.recepcionista.name())) {
-                        throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado: " + userRol);
-                }
+    /**
+     * Genera el comprobante de un pago
+     * 
+     * @param idPago            ID del pago a consultar
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @param userEmail         Email del usuario autenticado
+     * @return DTO con los datos del pago
+     */
+    @Transactional(readOnly = true)
+    public PagoResponseDTO generarComprobante(Long idPago, String userRol, Long userIdAutenticado,
+            String userEmail) {
 
-                UsuarioPerfil socio = usuarioRepository.findById(idSocio)
-                                .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + idSocio));
+        Pago pago = pagoRepository.findById(idPago)
+                .orElseThrow(() -> new RuntimeException("Pago no encontrado con ID: " + idPago));
 
-                List<Pago> pagos = pagoRepository.findBySocioId(idSocio);
+        if (userRol.equals(EnumRol.socio.name())) {
+            UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Socio autenticado no encontrado con email: " + userEmail));
 
-                if (pagos.isEmpty()) {
-                        throw new RuntimeException("El socio " + socio.getNombre() + " no tiene pagos registrados");
-                }
+            UsuarioPerfil socioPago = pago.getSocioMembresia().getSocio();
 
-                return pagos.stream()
-                                .map(this::convertirAResponseDTO)
-                                .collect(Collectors.toList());
+            if (!socioAutenticado.getEmail().equals(socioPago.getEmail())) {
+                throw new SecurityAuthorizationException(
+                        "Acceso denegado. Solo puede ver sus propios comprobantes");
+            }
+        } else if (!userRol.equals(EnumRol.administrador.name())
+                && !userRol.equals(EnumRol.recepcionista.name())) {
+            throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado: " + userRol);
         }
 
-        /**
-         * Filtra pagos aplicando criterios de búsqueda
-         * 
-         * @param filtro  DTO con los filtros a aplicar
-         * @param userRol Rol del usuario autenticado
-         * @return Lista de pagos que coinciden con los filtros
-         * @throws RuntimeException Si no se encuentran pagos
-         */
-        @Transactional(readOnly = true)
-        public List<PagoResponseDTO> filtrarPagos(FiltroPagosRequestDTO filtro, String userRol) {
-                ValidacionDeRoles.validarAdminORecepcionista(userRol);
+        return convertirAResponseDTO(pago);
+    }
 
-                Specification<Pago> spec = (root, query, cb) -> {
-                        List<Predicate> predicates = new ArrayList<>();
+    /**
+     * Genera un comprobante de pago en formato PDF
+     * 
+     * @param idPago            ID del pago a consultar
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @param userEmail         Email del usuario autenticado
+     * @return Array de bytes del PDF generado
+     */
+    @Transactional(readOnly = true)
+    public byte[] generarComprobantePDF(Long idPago, String userRol, Long userIdAutenticado, String userEmail) {
+        PagoResponseDTO pagoDTO = generarComprobante(idPago, userRol, userIdAutenticado, userEmail);
 
-                        if (filtro.getIdSocio() != null) {
-                                predicates.add(cb.equal(root.get("socioMembresia").get("socio").get("idUsuario"),
-                                                filtro.getIdSocio()));
-                        }
+        return pagoPDFService.generarComprobantePDF(pagoDTO);
+    }
 
-                        if (filtro.getMetodoPago() != null && !filtro.getMetodoPago().isEmpty()) {
-                                try {
-                                        EnumMetodoPago metodo = EnumMetodoPago
-                                                        .valueOf(filtro.getMetodoPago().toUpperCase());
-                                        predicates.add(cb.equal(root.get("metodoPago"), metodo));
-                                } catch (IllegalArgumentException e) {
+    /**
+     * 
+     * @param idPago
+     * @return
+     */
+    @Transactional(readOnly = true)
+    public Pago obtenerPagoPorId(Long idPago) {
+        return pagoRepository.findById(idPago)
+                .orElseThrow(() -> new RuntimeException("Pago no encontrado con ID: " + idPago));
+    }
 
-                                }
-                        }
+    private void enviarEventoPago(Pago pago) {
+        EventoPagoRequestDTO dto = new EventoPagoRequestDTO();
+        dto.setSocioId(pago.getSocioMembresia().getSocio().getIdUsuario());
+        dto.setMonto(pago.getMonto());
+        dto.setFechaPago(pago.getFechaPago());
+        dto.setTipoMembresia(pago.getSocioMembresia().getMembresia().getNombre());
+        dto.setMetodoPago(pago.getMetodoPago().name());
+        eventoPagoAsyncService.enviarEventoPago(dto);
 
-                        if (filtro.getAnulado() != null) {
-                                predicates.add(cb.equal(root.get("anulado"), filtro.getAnulado()));
-                        }
-
-                        if (filtro.getFechaInicio() != null && filtro.getFechaFin() != null) {
-                                predicates.add(cb.between(root.get("fechaPago"), filtro.getFechaInicio(),
-                                                filtro.getFechaFin()));
-                        } else if (filtro.getFechaInicio() != null) {
-                                predicates.add(cb.greaterThanOrEqualTo(root.get("fechaPago"), filtro.getFechaInicio()));
-                        } else if (filtro.getFechaFin() != null) {
-                                predicates.add(cb.lessThanOrEqualTo(root.get("fechaPago"), filtro.getFechaFin()));
-                        }
-
-                        return cb.and(predicates.toArray(new Predicate[0]));
-                };
-
-                List<Pago> pagos = pagoRepository.findAll(spec);
-
-                if (pagos.isEmpty()) {
-                        throw new RuntimeException("No se encontraron pagos con los filtros aplicados");
-                }
-
-                return pagos.stream()
-                                .map(this::convertirAResponseDTO)
-                                .collect(Collectors.toList());
-        }
-
-        /**
-         * Anula un pago existente
-         * 
-         * @param requestDTO DTO con el ID del pago y motivo de anulación
-         * @param userRol    Rol del usuario autenticado
-         * @return Mensaje de confirmación de la anulación
-         * @throws RuntimeException Si el pago no existe o ya está anulado
-         */
-        @Transactional
-        public MessegeGlobalDTO anularPago(AnularPagoRequestDTO requestDTO, String userRol) {
-                ValidacionDeRoles.validarAdminORecepcionista(userRol);
-
-                Pago pago = pagoRepository.findById(requestDTO.getIdPago())
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Pago no encontrado con ID: " + requestDTO.getIdPago()));
-
-                if (pago.isAnulado()) {
-                        throw new RuntimeException("Este pago ya está anulado");
-                }
-
-                pago.setAnulado(true);
-                pago.setFechaAnulacion(LocalDateTime.now());
-                pago.setMotivoAnulacion(requestDTO.getMotivo());
-                pago.setEstado(EnumEstadoPago.ANULADO);
-
-                pagoRepository.save(pago);
-
-                return new MessegeGlobalDTO(String.format(
-                                "Pago ID: %d anulado correctamente. Motivo: %s",
-                                pago.getIdPago(),
-                                requestDTO.getMotivo()));
-        }
-
-        /**
-         * Genera el comprobante de un pago
-         * 
-         * @param idPago            ID del pago a consultar
-         * @param userRol           Rol del usuario autenticado
-         * @param userIdAutenticado ID del usuario autenticado
-         * @param userEmail         Email del usuario autenticado
-         * @return DTO con los datos del pago
-         */
-        @Transactional(readOnly = true)
-        public PagoResponseDTO generarComprobante(Long idPago, String userRol, Long userIdAutenticado,
-                        String userEmail) {
-
-                Pago pago = pagoRepository.findById(idPago)
-                                .orElseThrow(() -> new RuntimeException("Pago no encontrado con ID: " + idPago));
-
-                if (userRol.equals(EnumRol.socio.name())) {
-                        UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
-                                        .orElseThrow(() -> new RuntimeException(
-                                                        "Socio autenticado no encontrado con email: " + userEmail));
-
-                        UsuarioPerfil socioPago = pago.getSocioMembresia().getSocio();
-
-                        if (!socioAutenticado.getEmail().equals(socioPago.getEmail())) {
-                                throw new SecurityAuthorizationException(
-                                                "Acceso denegado. Solo puede ver sus propios comprobantes");
-                        }
-                } else if (!userRol.equals(EnumRol.administrador.name())
-                                && !userRol.equals(EnumRol.recepcionista.name())) {
-                        throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado: " + userRol);
-                }
-
-                return convertirAResponseDTO(pago);
-        }
-
-        /**
-         * Genera un comprobante de pago en formato PDF
-         * 
-         * @param idPago            ID del pago a consultar
-         * @param userRol           Rol del usuario autenticado
-         * @param userIdAutenticado ID del usuario autenticado
-         * @param userEmail         Email del usuario autenticado
-         * @return Array de bytes del PDF generado
-         */
-        @Transactional(readOnly = true)
-        public byte[] generarComprobantePDF(Long idPago, String userRol, Long userIdAutenticado, String userEmail) {
-                PagoResponseDTO pagoDTO = generarComprobante(idPago, userRol, userIdAutenticado, userEmail);
-
-                return pagoPDFService.generarComprobantePDF(pagoDTO);
-        }
-
-        /**
-         * 
-         * @param idPago
-         * @return
-         */
-        @Transactional(readOnly = true)
-        public Pago obtenerPagoPorId(Long idPago) {
-                return pagoRepository.findById(idPago)
-                                .orElseThrow(() -> new RuntimeException("Pago no encontrado con ID: " + idPago));
-        }
+    }
 }
