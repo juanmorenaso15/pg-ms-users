@@ -32,22 +32,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ExportacionPdfService {
 
-    
-    /** */
-    private static final Color COLOR_PRIMARIO = new DeviceRgb(0, 102, 204); // Azul corporativo
-    
-    /** */
+    /** Color primario azul corporativo */
+    private static final Color COLOR_PRIMARIO = new DeviceRgb(0, 102, 204);
+
+    /** Color secundario para fondos */
     private static final Color COLOR_SECUNDARIO = new DeviceRgb(240, 245, 250);
-    
-    /** */
+
+    /** Color para bordes */
     private static final Color COLOR_BORDE = new DeviceRgb(200, 200, 200);
 
-/**
- * 
- * @param rutina
- * @return
- * @throws IOException
- */
+    /**
+     * Exporta una rutina a formato PDF
+     * 
+     * @param rutina DTO con los datos de la rutina a exportar
+     * @return Array de bytes del PDF generado
+     * @throws IOException Si ocurre un error al generar el PDF
+     */
     public byte[] exportarRutinaPdf(RutinaExportacionDTO rutina) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         PdfWriter writer = new PdfWriter(baos);
@@ -146,11 +146,8 @@ public class ExportacionPdfService {
         if (rutina.getDetalles() != null) {
             int orden = 1;
             for (DetalleRutinaExportacionDTO detalle : rutina.getDetalles()) {
-
                 table.addCell(createCell(String.valueOf(orden), TextAlignment.CENTER, 9));
-
                 table.addCell(createCell(detalle.getNombreEjercicio(), TextAlignment.LEFT, 9));
-
                 table.addCell(createCell(detalle.getGrupoMuscular(), TextAlignment.CENTER, 9));
 
                 String dia = detalle.getDiaSemana() != null ? "Día " + detalle.getDiaSemana() : "-";
@@ -179,7 +176,8 @@ public class ExportacionPdfService {
                         TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getNotas() != null && !detalle.getNotas().isEmpty() ? detalle.getNotas() : "-",
+                        detalle.getNotas() != null && !detalle.getNotas().isEmpty() ? detalle.getNotas()
+                                : "-",
                         TextAlignment.LEFT, 8));
 
                 orden++;
@@ -204,11 +202,12 @@ public class ExportacionPdfService {
     }
 
     /**
+     * Crea una celda para la tabla del PDF
      * 
-     * @param text
-     * @param alignment
-     * @param fontSize
-     * @return
+     * @param text      Texto de la celda
+     * @param alignment Alineación del texto
+     * @param fontSize  Tamaño de fuente
+     * @return Celda formateada
      */
     private Cell createCell(String text, TextAlignment alignment, int fontSize) {
         return new Cell()
