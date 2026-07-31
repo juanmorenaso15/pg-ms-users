@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.pulse_gym.lb_common.dto.DashboardProgresoSocioDTO;
 import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
 import com.pulse_gym.lb_common.dto.SesionResponseDTO;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
@@ -87,6 +88,36 @@ public class SeguimientoController {
             log.error("Error al obtener historial: {}", e.getMessage(), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al obtener historial", e);
+        }
+    }
+
+    /**
+     * Obtiene el dashboard de progreso de un socio
+     * 
+     * @param idSocio   ID del socio a consultar
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return DTO con el dashboard de progreso del socio
+     */
+    @GetMapping("/dashboard/socio/{idSocio}")
+    public ResponseEntity<DashboardProgresoSocioDTO> obtenerDashboardSocio(
+            @PathVariable Long idSocio,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Obteniendo dashboard de progreso para socio ID: {} con email: {}",
+                    idSocio, userEmail);
+            DashboardProgresoSocioDTO dashboard = seguimientoService.obtenerDashboardSocio(
+                    idSocio, userRol, userEmail);
+            return ResponseEntity.ok(dashboard);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al obtener dashboard de socio: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener dashboard de socio", e);
         }
     }
 
