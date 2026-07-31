@@ -2,7 +2,9 @@ package com.pulse_gym.ms_users.controller;
 
 import java.util.List;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -149,4 +152,42 @@ public class SeguimientoController {
         }
     }
 
+    /**
+     * Exporta una rutina a formato PDF
+     * 
+     * @param idSocio   ID del socio dueño de la rutina
+     * @param idRutina  ID de la rutina a exportar (opcional)
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Archivo PDF de la rutina
+     */
+    @GetMapping("/rutina/{idSocio}/exportar-pdf")
+    public ResponseEntity<byte[]> exportarRutinaPdf(
+            @PathVariable Long idSocio,
+            @RequestParam(required = false) Long idRutina,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Exportando rutina a PDF para socio ID: {}", idSocio);
+
+            byte[] pdfBytes = seguimientoService.exportarRutinaPdf(idSocio, idRutina, userRol, userEmail);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "rutina_" + idSocio + ".pdf");
+            headers.setContentLength(pdfBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al exportar rutina a PDF: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al exportar rutina a PDF", e);
+        }
+    }
 }
