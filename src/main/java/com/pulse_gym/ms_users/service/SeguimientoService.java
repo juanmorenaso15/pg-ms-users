@@ -1,5 +1,6 @@
 package com.pulse_gym.ms_users.service;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -15,10 +16,12 @@ import org.springframework.stereotype.Service;
 import com.pulse_gym.lb_common.dto.DashboardMonitoreoEntrenadorDTO;
 import com.pulse_gym.lb_common.dto.DashboardProgresoSocioDTO;
 import com.pulse_gym.lb_common.dto.DetalleEjercicioSesionDTO;
+import com.pulse_gym.lb_common.dto.DetalleRutinaExportacionDTO;
 import com.pulse_gym.lb_common.dto.DetalleSesionResponseDTO;
 import com.pulse_gym.lb_common.dto.EvolucionEjercicioDTO;
 import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
 import com.pulse_gym.lb_common.dto.ResumenSocioDTO;
+import com.pulse_gym.lb_common.dto.RutinaExportacionDTO;
 import com.pulse_gym.lb_common.dto.SesionResponseDTO;
 import com.pulse_gym.lb_common.entity.user.DetalleRutina;
 import com.pulse_gym.lb_common.entity.user.DetalleSesionEjercicio;
@@ -64,6 +67,9 @@ public class SeguimientoService {
 
     /** Repositorio de asignaciones entrenador-socio */
     private final EntrenadorSocioRepository entrenadorSocioRepository;
+
+    /** Servicio para exportar rutinas a PDF */
+    private final ExportacionPdfService exportacionPdfService;
 
     /**
      * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
@@ -177,6 +183,7 @@ public class SeguimientoService {
 
     /**
      * Registra una sesión de entrenamiento con asignación automática de entrenador
+     * 
      * @param request   Datos de la sesión a registrar
      * @param userRol   Rol del usuario autenticado
      * @param userEmail Email del usuario autenticado
@@ -538,5 +545,93 @@ public class SeguimientoService {
         return racha;
     }
 
-    
+    /**
+     * Exporta una rutina a formato PDF con validación de permisos
+     * 
+     * @param idSocio   ID del socio dueño de la rutina
+     * @param idRutina  ID de la rutina a exportar (opcional, si es null se usa la
+     *                  activa)
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Array de bytes del PDF generado
+     */
+    public byte[] exportarRutinaPdf(Long idSocio, Long idRutina, String userRol, String userEmail) {
+        UsuarioPerfil socio = usuarioRepository.findById(idSocio)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
+
+        if (EnumRol.socio.name().equals(userRol)) {
+            UsuarioPerfil autenticado = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Usuario no autenticado"));
+            if (!socio.getIdUsuario().equals(autenticado.getIdUsuario())) {
+                throw new SecurityAuthorizationException("Solo puede exportar su propia rutina");
+            }
+        } else if (EnumRol.entrenador.name().equals(userRol)) {
+            UsuarioPerfil entrenador = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Entrenador no encontrado"));
+            boolean esAsignado = entrenadorSocioRepository
+                    .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(entrenador.getIdUsuario(), idSocio);
+            if (!esAsignado) {
+                throw new SecurityAuthorizationException("No tiene acceso a la rutina de este socio");
+            }
+        } else if (!EnumRol.administrador.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("No tiene permisos para exportar esta rutina");
+        }
+
+        RutinaIA rutina;
+        if (idRutina != null) {
+            rutina = rutinaRepository.findById(idRutina)
+                    .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
+
+                    if (!rutina.getSocio().getIdUsuario().equals(idSocio)) {
+                throw new SecurityAuthorizationException("La rutina no pertenece al socio especificado");
+            }
+        } else {
+
+            rutina = rutinaRepository.findRutinaActivaReciente(idSocio)
+                    .orElseThrow(() -> new RuntimeException("El socio no tiene una rutina activa"));
+        }
+
+        RutinaExportacionDTO exportDTO = new RutinaExportacionDTO();
+        exportDTO.setIdRutina(rutina.getIdRutinaIa());
+        exportDTO.setNombre(rutina.getObjetivo() != null ? rutina.getObjetivo() : "Rutina de entrenamiento");
+        exportDTO.setDescripcion(rutina.getRutinaGenerada() != null
+                ? rutina.getRutinaGenerada().substring(0, Math.min(200, rutina.getRutinaGenerada().length()))
+                : "Rutina generada por IA");
+        exportDTO.setExplicacionIA(rutina.getExplicacionIa());
+        exportDTO.setNombreSocio(socio.getNombre());
+        exportDTO.setApellidoSocio(socio.getApellido());
+        exportDTO.setEmailSocio(socio.getEmail());
+        exportDTO.setFechaGeneracion(rutina.getFechaGeneracion());
+        exportDTO.setVersion(rutina.getVersion());
+        exportDTO.setGeneradaPorIA(rutina.getModeloIa() != null);
+
+        List<DetalleRutinaExportacionDTO> detalles = new ArrayList<>();
+        if (rutina.getDetalles() != null) {
+            for (DetalleRutina detalle : rutina.getDetalles()) {
+                DetalleRutinaExportacionDTO detalleDTO = new DetalleRutinaExportacionDTO();
+                detalleDTO.setNombreEjercicio(detalle.getEjercicio().getNombre());
+                detalleDTO.setGrupoMuscular(detalle.getEjercicio().getGrupoMuscular());
+                detalleDTO.setDiaSemana(detalle.getDiaSemana());
+                detalleDTO.setOrden(detalle.getOrden());
+                detalleDTO.setSeries(detalle.getSeries());
+                detalleDTO.setRepeticionesMin(detalle.getRepeticionesMin());
+                detalleDTO.setRepeticionesMax(detalle.getRepeticionesMax());
+                detalleDTO.setPesoSugerido(
+                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido().toString() : null);
+                detalleDTO.setDescansoSegundos(detalle.getDescansoSegundos());
+                detalleDTO.setNotas(detalle.getNotas());
+                detalleDTO.setUrlImagen(detalle.getEjercicio().getUrlImagen());
+                detalles.add(detalleDTO);
+            }
+        }
+        exportDTO.setDetalles(detalles);
+
+        try {
+            return exportacionPdfService.exportarRutinaPdf(exportDTO);
+        } catch (IOException e) {
+            log.error("Error al generar PDF: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al generar el PDF de la rutina", e);
+        }
+    }
+
 }
