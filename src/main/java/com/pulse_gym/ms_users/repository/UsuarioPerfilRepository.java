@@ -78,4 +78,36 @@ public interface UsuarioPerfilRepository extends JpaRepository<UsuarioPerfil, Lo
      * @return Lista de usuarios que coinciden con el estado especificado
      */
     List<UsuarioPerfil> findByEstado(EnumEstadoUsuario estado);
+
+    /**
+     * Busca usuarios por email (búsqueda parcial) y estado
+     * 
+     * @param emailSubstring Subcadena del email a buscar
+     * @param estado         Estado del usuario
+     * @return Lista de usuarios que coinciden
+     */
+    List<UsuarioPerfil> findByEmailContainingAndEstado(String emailSubstring, EnumEstadoUsuario estado);
+
+    /**
+     * Busca entrenadores activos con especialidad definida
+     * 
+     * @param estado Estado del usuario
+     * @return Lista de entrenadores activos
+     */
+    @Query("SELECT u FROM UsuarioPerfil u " +
+            "WHERE u.estado = :estado " +
+            "AND u.especialidad IS NOT NULL " +
+            "AND u.especialidad != ''")
+    List<UsuarioPerfil> findEntrenadoresActivos(@Param("estado") EnumEstadoUsuario estado);
+
+    /**
+     * Busca entrenadores activos con especialidad definida (estado ACTIVO por
+     * defecto)
+     * 
+     * @return Lista de entrenadores activos
+     */
+    default List<UsuarioPerfil> findEntrenadoresActivos() {
+        return findEntrenadoresActivos(EnumEstadoUsuario.ACTIVO);
+    }
+
 }

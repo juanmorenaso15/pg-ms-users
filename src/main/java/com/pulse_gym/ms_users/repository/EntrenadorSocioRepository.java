@@ -29,4 +29,14 @@ public interface EntrenadorSocioRepository extends JpaRepository<EntrenadorSocio
      * @return true si está asignado, false en caso contrario
      */
     boolean existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(Long idEntrenador, Long idSocio);
+
+    /**
+     * Cuenta los socios activos asignados a un entrenador
+     * 
+     * @param idEntrenador ID del entrenador
+     * @return Número de socios activos asignados
+     */
+    @Query("SELECT COUNT(es) FROM EntrenadorSocio es " +
+            "WHERE es.entrenador.idUsuario = :idEntrenador AND es.activa = true")
+    Long countByEntrenadorAndActivaTrue(@Param("idEntrenador") Long idEntrenador);
 }

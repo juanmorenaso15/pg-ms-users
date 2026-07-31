@@ -28,6 +28,7 @@ import com.pulse_gym.lb_common.entity.user.SesionEntrenamiento;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
 import com.pulse_gym.lb_common.enums.EnumEstadoEjecucionEjercicio;
 import com.pulse_gym.lb_common.enums.EnumEstadoSesion;
+import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
 import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.repository.DetalleRutinaRepository;
@@ -114,6 +115,49 @@ public class SeguimientoService {
         return dto;
     }
 
+    /**
+     * Busca un entrenador disponible con menor carga de socios asignados
+     * 
+     * @return Entrenador disponible o null si no hay
+     */
+    private UsuarioPerfil buscarEntrenadorDisponible() {
+        List<UsuarioPerfil> entrenadores = usuarioRepository.findEntrenadoresActivos();
+
+        if (entrenadores.isEmpty()) {
+            entrenadores = usuarioRepository.findByEmailContainingAndEstado("entrenador", EnumEstadoUsuario.ACTIVO);
+        }
+
+        if (entrenadores.isEmpty()) {
+            log.warn("No hay entrenadores activos en el sistema");
+            return null;
+        }
+
+        if (entrenadores.size() == 1) {
+            return entrenadores.get(0);
+        }
+
+        UsuarioPerfil entrenadorSeleccionado = null;
+        int menorCantidadSocios = Integer.MAX_VALUE;
+
+        for (UsuarioPerfil entrenador : entrenadores) {
+            Long cantidadSocios = entrenadorSocioRepository.countByEntrenadorAndActivaTrue(
+                    entrenador.getIdUsuario());
+
+            if (cantidadSocios < menorCantidadSocios) {
+                menorCantidadSocios = cantidadSocios.intValue();
+                entrenadorSeleccionado = entrenador;
+            }
+        }
+
+        return entrenadorSeleccionado;
+    }
+
+    /**
+     * Asigna un socio a un entrenador si no tiene asignación activa
+     * 
+     * @param socio      Socio a asignar
+     * @param entrenador Entrenador asignado
+     */
     private void asignarSocioAEntrenadorSiNoExiste(UsuarioPerfil socio, UsuarioPerfil entrenador) {
         boolean existe = entrenadorSocioRepository
                 .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(
@@ -132,9 +176,7 @@ public class SeguimientoService {
     }
 
     /**
-     * 
-     * Registra una sesión de entrenamiento realizada por un socio
-     * 
+     * Registra una sesión de entrenamiento con asignación automática de entrenador
      * @param request   Datos de la sesión a registrar
      * @param userRol   Rol del usuario autenticado
      * @param userEmail Email del usuario autenticado
@@ -159,15 +201,28 @@ public class SeguimientoService {
         sesion.setSocio(socioAutenticado);
 
         RutinaIA rutina = null;
+        UsuarioPerfil entrenadorAsignado = null;
+
         if (request.getIdRutina() != null) {
             rutina = rutinaRepository.findById(request.getIdRutina())
                     .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
             sesion.setRutina(rutina);
 
-            // 🔥 ASIGNACIÓN AUTOMÁTICA: Si la rutina tiene un entrenador,
-            // asignar el socio a ese entrenador (si no existe la asignación)
-            if (rutina.getEntrenador() != null) {
-                asignarSocioAEntrenadorSiNoExiste(socioAutenticado, rutina.getEntrenador());
+            entrenadorAsignado = rutina.getEntrenador();
+
+            if (entrenadorAsignado == null) {
+                entrenadorAsignado = buscarEntrenadorDisponible();
+                if (entrenadorAsignado != null) {
+                    log.info("Asignando entrenador activo ID: {} al socio ID: {}",
+                            entrenadorAsignado.getIdUsuario(), socioAutenticado.getIdUsuario());
+                } else {
+                    log.warn("No se encontró ningún entrenador activo disponible para asignar al socio ID: {}",
+                            socioAutenticado.getIdUsuario());
+                }
+            }
+
+            if (entrenadorAsignado != null) {
+                asignarSocioAEntrenadorSiNoExiste(socioAutenticado, entrenadorAsignado);
             }
         }
 
