@@ -190,4 +190,42 @@ public class SeguimientoController {
                     "Error al exportar rutina a PDF", e);
         }
     }
+
+    /**
+     * Exporta un plan nutricional a formato PDF
+     * @param idSocio ID del socio dueño del plan nutricional
+     * @param idPlan ID del plan nutricional a exportar (opcional)
+     * @param userRol Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Archivo PDF del plan nutricional
+     */
+    @GetMapping("/plan-nutricional/{idSocio}/exportar-pdf")
+    public ResponseEntity<byte[]> exportarPlanNutricionalPdf(
+            @PathVariable Long idSocio,
+            @RequestParam(required = false) Long idPlan,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Exportando plan nutricional a PDF para socio ID: {}", idSocio);
+
+            byte[] pdfBytes = seguimientoService.exportarPlanNutricionalPdf(idSocio, idPlan, userRol, userEmail);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "plan_nutricional_" + idSocio + ".pdf");
+            headers.setContentLength(pdfBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al exportar plan nutricional a PDF: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al exportar plan nutricional a PDF", e);
+        }
+    }
 }
