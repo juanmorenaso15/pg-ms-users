@@ -9,7 +9,7 @@ spring:
     url: ${SUPABASE_URL_USERS}
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
-    
+
     hikari:
       maximum-pool-size: 5
       minimum-idle: 2
@@ -19,7 +19,7 @@ spring:
       leak-detection-threshold: 30000
       pool-name: HikariPool-Users
       data-source-properties:
-        prepareThreshold: 0 
+        prepareThreshold: 0
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
