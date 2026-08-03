@@ -107,7 +107,6 @@ public class PlanNutricionalService {
     }
 
     /**
-     * 
      * Guarda el plan nutricional generado por IA en la base de datos
      * 
      * @param socio       Socio al que pertenece el plan
@@ -126,8 +125,12 @@ public class PlanNutricionalService {
         plan.setCarbohidratosG(respuestaIA.getCarbohidratosG());
         plan.setGrasasG(respuestaIA.getGrasasG());
 
+        plan.setExplicacionIA(respuestaIA.getExplicacionIA());
+
         if (request.getRestriccionesDieteticas() != null && !request.getRestriccionesDieteticas().isEmpty()) {
             plan.setRestriccionesDieteticas(String.join(", ", request.getRestriccionesDieteticas()));
+        } else {
+            plan.setRestriccionesDieteticas("Sin restricciones dietéticas");
         }
 
         try {
