@@ -20,7 +20,6 @@ import com.pulse_gym.lb_common.dto.RutinaGeneracionRequestDTO;
 import com.pulse_gym.lb_common.dto.RutinaGeneracionResponseDTO;
 import com.pulse_gym.lb_common.dto.RutinaHistorialResponseDTO;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
-import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_users.service.RutinaService;
 
 import jakarta.validation.Valid;

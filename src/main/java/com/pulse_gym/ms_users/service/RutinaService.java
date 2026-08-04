@@ -19,6 +19,7 @@ import com.pulse_gym.lb_common.dto.RutinaGeneracionResponseDTO;
 import com.pulse_gym.lb_common.dto.RutinaHistorialResponseDTO;
 import com.pulse_gym.lb_common.entity.user.DetalleRutina;
 import com.pulse_gym.lb_common.entity.user.Ejercicio;
+import com.pulse_gym.lb_common.entity.user.EntrenadorSocio;
 import com.pulse_gym.lb_common.entity.user.HistorialRutinaVersion;
 import com.pulse_gym.lb_common.entity.user.RutinaIA;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
@@ -26,6 +27,7 @@ import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.repository.DetalleRutinaRepository;
 import com.pulse_gym.ms_users.repository.EjercicioRepository;
+import com.pulse_gym.ms_users.repository.EntrenadorSocioRepository;
 import com.pulse_gym.ms_users.repository.HistorialRutinaVersionRepository;
 import com.pulse_gym.ms_users.repository.RutinaRepository;
 import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
@@ -65,6 +67,12 @@ public class RutinaService {
 
     /** Repositorio de historial de versiones de rutina */
     private final HistorialRutinaVersionRepository historialRutinaVersionRepository;
+
+    /** Servicio de gestión de entrenadores */
+    private final EntrenadorService entrenadorService;
+
+    /** Repositorio de relaciones entre entrenadores y socios */
+    private final EntrenadorSocioRepository entrenadorSocioRepository;
 
     /**
      * Convierte una entidad RutinaIA a RutinaGeneracionResponseDTO
@@ -228,12 +236,39 @@ public class RutinaService {
     }
 
     /**
+     * Asigna un socio a un entrenador si no existe una relación activa entre ellos
+     * 
+     * @param socio      Socio a asignar
+     * @param entrenador Entrenador al que se asigna el socio
+     */
+    private void asignarSocioAEntrenadorSiNoExiste(UsuarioPerfil socio, UsuarioPerfil entrenador) {
+        try {
+            boolean existe = entrenadorSocioRepository
+                    .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(
+                            entrenador.getIdUsuario(),
+                            socio.getIdUsuario());
+
+            if (!existe) {
+                EntrenadorSocio asignacion = new EntrenadorSocio();
+                asignacion.setEntrenador(entrenador);
+                asignacion.setSocio(socio);
+                asignacion.setActiva(true);
+                entrenadorSocioRepository.save(asignacion);
+                log.info("Socio {} asignado automáticamente al entrenador {}",
+                        socio.getIdUsuario(), entrenador.getIdUsuario());
+            }
+        } catch (Exception e) {
+            log.warn("Error al asignar socio a entrenador: {}", e.getMessage());
+        }
+    }
+
+    /**
      * Guarda la rutina generada por IA en la base de datos
      * 
-     * @param socio       Socio al que pertenece la rutina
-     * @param respuestaIA Respuesta de la IA con los datos de la rutina
-     * @param request     Preferencias del socio
-     * @return Rutina guardada
+     * @param socio       Socio al que se le asigna la rutina
+     * @param respuestaIA DTO con los detalles de la rutina generada
+     * @param request     DTO con las preferencias del socio
+     * @return Entidad RutinaIA guardada
      */
     private RutinaIA guardarRutina(UsuarioPerfil socio, RutinaGeneracionResponseDTO respuestaIA,
             RutinaGeneracionRequestDTO request) {
@@ -249,6 +284,18 @@ public class RutinaService {
         rutina.setVersion(1);
         rutina.setActiva(true);
         rutina.setExplicacionIa(respuestaIA.getExplicacionIA());
+
+        UsuarioPerfil entrenador = entrenadorService.buscarEntrenadorDisponible();
+        if (entrenador != null) {
+            rutina.setEntrenador(entrenador);
+            log.info("Entrenador asignado automáticamente a la rutina: {} {} (ID: {})",
+                    entrenador.getNombre(), entrenador.getApellido(), entrenador.getIdUsuario());
+
+            asignarSocioAEntrenadorSiNoExiste(socio, entrenador);
+        } else {
+            log.warn("No se encontró entrenador disponible para asignar a la rutina del socio ID: {}",
+                    socio.getIdUsuario());
+        }
 
         try {
             String rutinaJson = objectMapper.writeValueAsString(respuestaIA);
@@ -433,6 +480,18 @@ public class RutinaService {
             throw new RuntimeException("El detalle no pertenece a esta rutina");
         }
 
+        String nombreModificador = userEmail;
+        try {
+            if (userEmail != null) {
+                UsuarioPerfil usuario = usuarioRepository.findByEmail(userEmail).orElse(null);
+                if (usuario != null) {
+                    nombreModificador = usuario.getNombre() + " " + usuario.getApellido();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("No se pudo obtener el nombre del usuario: {}", e.getMessage());
+        }
+
         if (request.getSeries() != null) {
             detalle.setSeries(request.getSeries());
         }
@@ -452,7 +511,7 @@ public class RutinaService {
             detalle.setNotas(request.getNotas());
         }
 
-        detalle.setModificadoPor(userEmail != null ? userEmail : userRol);
+        detalle.setModificadoPor(nombreModificador);
         detalle.setFechaModificacion(LocalDateTime.now());
 
         detalleRutinaRepository.save(detalle);
@@ -460,14 +519,15 @@ public class RutinaService {
         rutina.setVersion(rutina.getVersion() + 1);
         rutinaRepository.save(rutina);
 
-        log.info("Rutina ID: {} ajustada correctamente por: {}", idRutina, userEmail);
+        log.info("Rutina ID: {} ajustada correctamente por: {}", idRutina, nombreModificador);
 
         return Map.of(
                 "success", true,
                 "message", "Rutina ajustada correctamente",
                 "idRutina", idRutina,
                 "idDetalle", request.getIdDetalle(),
-                "nuevaVersion", rutina.getVersion());
+                "nuevaVersion", rutina.getVersion(),
+                "modificadoPor", nombreModificador);
     }
 
     /**
