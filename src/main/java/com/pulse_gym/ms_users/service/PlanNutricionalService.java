@@ -124,11 +124,16 @@ public class PlanNutricionalService {
         plan.setProteinasG(respuestaIA.getProteinasG());
         plan.setCarbohidratosG(respuestaIA.getCarbohidratosG());
         plan.setGrasasG(respuestaIA.getGrasasG());
-
         plan.setExplicacionIA(respuestaIA.getExplicacionIA());
 
-        if (request.getRestriccionesDieteticas() != null && !request.getRestriccionesDieteticas().isEmpty()) {
-            plan.setRestriccionesDieteticas(String.join(", ", request.getRestriccionesDieteticas()));
+        List<String> restricciones = respuestaIA.getRestriccionesDieteticas();
+        if (restricciones == null || restricciones.isEmpty()) {
+            restricciones = request.getRestriccionesDieteticas();
+            respuestaIA.setRestriccionesDieteticas(restricciones);
+        }
+
+        if (restricciones != null && !restricciones.isEmpty()) {
+            plan.setRestriccionesDieteticas(String.join(", ", restricciones));
         } else {
             plan.setRestriccionesDieteticas("Sin restricciones dietéticas");
         }
