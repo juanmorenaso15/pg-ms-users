@@ -97,6 +97,59 @@ public class ExportacionPdfService {
 
         document.add(headerTable);
 
+        if (rutina.getModificadoPor() != null && !rutina.getModificadoPor().isEmpty()) {
+            document.add(new Paragraph(" ")
+                    .setBorderBottom(Border.NO_BORDER)
+                    .setMarginTop(0));
+
+            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
+                    .setWidth(UnitValue.createPercentValue(100))
+                    .setMarginBottom(10);
+
+            Cell modLabel = new Cell();
+            modLabel.add(new Paragraph("Última modificación:").setBold().setFontSize(10));
+            modLabel.setBorder(Border.NO_BORDER);
+            modLabel.setWidth(UnitValue.createPercentValue(25));
+            modTable.addCell(modLabel);
+
+            String modInfo = "Por: " + rutina.getModificadoPor();
+            if (rutina.getFechaModificacion() != null) {
+                modInfo += " | Fecha: " + rutina.getFechaModificacion()
+                        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+            }
+            if (rutina.getMotivoModificacion() != null && !rutina.getMotivoModificacion().isEmpty()) {
+                modInfo += " | Motivo: " + rutina.getMotivoModificacion();
+            }
+            Cell modValue = new Cell();
+            modValue.add(new Paragraph(modInfo).setFontSize(10).setFontColor(new DeviceRgb(80, 80, 80)));
+            modValue.setBorder(Border.NO_BORDER);
+            modTable.addCell(modValue);
+
+            document.add(modTable);
+        } else {
+            document.add(new Paragraph(" ")
+                    .setBorderBottom(Border.NO_BORDER)
+                    .setMarginTop(0));
+
+            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
+                    .setWidth(UnitValue.createPercentValue(100))
+                    .setMarginBottom(10);
+
+            Cell modLabel = new Cell();
+            modLabel.add(new Paragraph("Estado:").setBold().setFontSize(10));
+            modLabel.setBorder(Border.NO_BORDER);
+            modLabel.setWidth(UnitValue.createPercentValue(25));
+            modTable.addCell(modLabel);
+
+            Cell modValue = new Cell();
+            modValue.add(new Paragraph("Rutina original - Sin modificaciones").setFontSize(10)
+                    .setFontColor(new DeviceRgb(80, 80, 80)));
+            modValue.setBorder(Border.NO_BORDER);
+            modTable.addCell(modValue);
+
+            document.add(modTable);
+        }
+
         document.add(new Paragraph("DESCRIPCIÓN")
                 .setFont(fontSubtitulo)
                 .setFontSize(14)
@@ -173,20 +226,15 @@ public class ExportacionPdfService {
                 table.addCell(createCell(reps, TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg"
-                                : "-",
+                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg" : "-",
                         TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getDescansoSegundos() != null
-                                ? detalle.getDescansoSegundos() + "s"
-                                : "-",
+                        detalle.getDescansoSegundos() != null ? detalle.getDescansoSegundos() + "s" : "-",
                         TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getNotas() != null && !detalle.getNotas().isEmpty()
-                                ? detalle.getNotas()
-                                : "-",
+                        detalle.getNotas() != null && !detalle.getNotas().isEmpty() ? detalle.getNotas() : "-",
                         TextAlignment.LEFT, 8));
 
                 orden++;
@@ -281,6 +329,59 @@ public class ExportacionPdfService {
 
         document.add(headerTable);
 
+        if (plan.getModificadoPor() != null && !plan.getModificadoPor().isEmpty()) {
+            document.add(new Paragraph(" ")
+                    .setBorderBottom(Border.NO_BORDER)
+                    .setMarginTop(0));
+
+            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
+                    .setWidth(UnitValue.createPercentValue(100))
+                    .setMarginBottom(10);
+
+            Cell modLabel = new Cell();
+            modLabel.add(new Paragraph("Última modificación:").setBold().setFontSize(10));
+            modLabel.setBorder(Border.NO_BORDER);
+            modLabel.setWidth(UnitValue.createPercentValue(25));
+            modTable.addCell(modLabel);
+
+            String modInfo = "Por: " + plan.getModificadoPor();
+            if (plan.getFechaModificacion() != null) {
+                modInfo += " | Fecha: " + plan.getFechaModificacion()
+                        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+            }
+            if (plan.getMotivoModificacion() != null && !plan.getMotivoModificacion().isEmpty()) {
+                modInfo += " | Motivo: " + plan.getMotivoModificacion();
+            }
+            Cell modValue = new Cell();
+            modValue.add(new Paragraph(modInfo).setFontSize(10).setFontColor(new DeviceRgb(80, 80, 80)));
+            modValue.setBorder(Border.NO_BORDER);
+            modTable.addCell(modValue);
+
+            document.add(modTable);
+        } else {
+            document.add(new Paragraph(" ")
+                    .setBorderBottom(Border.NO_BORDER)
+                    .setMarginTop(0));
+
+            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
+                    .setWidth(UnitValue.createPercentValue(100))
+                    .setMarginBottom(10);
+
+            Cell modLabel = new Cell();
+            modLabel.add(new Paragraph("Estado:").setBold().setFontSize(10));
+            modLabel.setBorder(Border.NO_BORDER);
+            modLabel.setWidth(UnitValue.createPercentValue(25));
+            modTable.addCell(modLabel);
+
+            Cell modValue = new Cell();
+            modValue.add(new Paragraph("Plan original - Sin modificaciones").setFontSize(10)
+                    .setFontColor(new DeviceRgb(80, 80, 80)));
+            modValue.setBorder(Border.NO_BORDER);
+            modTable.addCell(modValue);
+
+            document.add(modTable);
+        }
+
         document.add(new Paragraph("RESUMEN NUTRICIONAL DIARIO")
                 .setFont(fontSubtitulo)
                 .setFontSize(14)
@@ -310,7 +411,8 @@ public class ExportacionPdfService {
                 plan.getProteinasG() != null ? String.format("%.1fg", plan.getProteinasG()) : "-",
                 TextAlignment.CENTER, 10));
         resumenTable.addCell(createCell(
-                plan.getCarbohidratosG() != null ? String.format("%.1fg", plan.getCarbohidratosG()) : "-",
+                plan.getCarbohidratosG() != null ? String.format("%.1fg", plan.getCarbohidratosG())
+                        : "-",
                 TextAlignment.CENTER, 10));
         resumenTable.addCell(createCell(
                 plan.getGrasasG() != null ? String.format("%.1fg", plan.getGrasasG()) : "-",
@@ -353,14 +455,15 @@ public class ExportacionPdfService {
         if (plan.getSugerenciasComidas() != null && !plan.getSugerenciasComidas().isEmpty()) {
             String[] ordenComidas = { "desayuno", "colaciones", "almuerzo", "cena" };
             Map<String, String> nombresComidas = Map.of(
-                    "desayuno", "🍳 Desayuno",
-                    "colaciones", "🍎 Colaciones",
-                    "almuerzo", "🥗 Almuerzo",
-                    "cena", "🍲 Cena");
+                    "desayuno", "Desayuno",
+                    "colaciones", "Colaciones",
+                    "almuerzo", "Almuerzo",
+                    "cena", "Cena");
 
             for (String tipo : ordenComidas) {
                 if (plan.getSugerenciasComidas().containsKey(tipo)) {
-                    List<SugerenciaComidaExportacionDTO> comidas = plan.getSugerenciasComidas().get(tipo);
+                    List<SugerenciaComidaExportacionDTO> comidas = plan.getSugerenciasComidas()
+                            .get(tipo);
                     if (comidas != null && !comidas.isEmpty()) {
                         document.add(new Paragraph(nombresComidas.getOrDefault(tipo, tipo))
                                 .setFont(fontBold)
@@ -370,26 +473,57 @@ public class ExportacionPdfService {
 
                         for (SugerenciaComidaExportacionDTO comida : comidas) {
                             String nombreCalorias = comida.getNombre() +
-                                    (comida.getCalorias() != null ? " (" + comida.getCalorias() + " kcal)" : "");
+                                    (comida.getCalorias() != null
+                                            ? " (" + comida.getCalorias()
+                                                    + " kcal)"
+                                            : "");
                             document.add(new Paragraph("  • " + nombreCalorias)
                                     .setFont(fontBold)
                                     .setFontSize(10));
 
                             String infoNutricional = String.format(
                                     "    Proteínas: %.1fg | Carbohidratos: %.1fg | Grasas: %.1fg",
-                                    comida.getProteinas() != null ? comida.getProteinas() : 0.0,
-                                    comida.getCarbohidratos() != null ? comida.getCarbohidratos() : 0.0,
-                                    comida.getGrasas() != null ? comida.getGrasas() : 0.0);
+                                    comida.getProteinas() != null
+                                            ? comida.getProteinas()
+                                            : 0.0,
+                                    comida.getCarbohidratos() != null
+                                            ? comida.getCarbohidratos()
+                                            : 0.0,
+                                    comida.getGrasas() != null ? comida.getGrasas()
+                                            : 0.0);
                             document.add(new Paragraph(infoNutricional)
                                     .setFont(fontNormal)
                                     .setFontSize(9)
                                     .setFontColor(new DeviceRgb(80, 80, 80)));
 
-                            if (comida.getDescripcion() != null && !comida.getDescripcion().isEmpty()) {
-                                document.add(new Paragraph("    " + comida.getDescripcion())
+                            if (comida.getIngredientes() != null
+                                    && !comida.getIngredientes().isEmpty()) {
+                                document.add(new Paragraph("    📝 Ingredientes: "
+                                        + comida.getIngredientes())
                                         .setFont(fontNormal)
                                         .setFontSize(9)
-                                        .setFontColor(new DeviceRgb(60, 60, 60)));
+                                        .setFontColor(new DeviceRgb(60, 60,
+                                                60)));
+                            }
+
+                            if (comida.getPreparacion() != null
+                                    && !comida.getPreparacion().isEmpty()) {
+                                document.add(new Paragraph("    🔪 Preparación: "
+                                        + comida.getPreparacion())
+                                        .setFont(fontNormal)
+                                        .setFontSize(9)
+                                        .setFontColor(new DeviceRgb(60, 60,
+                                                60)));
+                            }
+
+                            if (comida.getDescripcion() != null
+                                    && !comida.getDescripcion().isEmpty()) {
+                                document.add(new Paragraph(
+                                        "    " + comida.getDescripcion())
+                                        .setFont(fontNormal)
+                                        .setFontSize(9)
+                                        .setFontColor(new DeviceRgb(60, 60,
+                                                60)));
                             }
 
                             document.add(new Paragraph(" "));
@@ -419,5 +553,4 @@ public class ExportacionPdfService {
         document.close();
         return baos.toByteArray();
     }
-
 }

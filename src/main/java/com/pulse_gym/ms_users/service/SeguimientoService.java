@@ -26,10 +26,12 @@ import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
 import com.pulse_gym.lb_common.dto.ResumenSocioDTO;
 import com.pulse_gym.lb_common.dto.RutinaExportacionDTO;
 import com.pulse_gym.lb_common.dto.SesionResponseDTO;
+import com.pulse_gym.lb_common.dto.SugerenciaComidaDTO;
 import com.pulse_gym.lb_common.dto.SugerenciaComidaExportacionDTO;
 import com.pulse_gym.lb_common.entity.user.DetalleRutina;
 import com.pulse_gym.lb_common.entity.user.DetalleSesionEjercicio;
 import com.pulse_gym.lb_common.entity.user.EntrenadorSocio;
+import com.pulse_gym.lb_common.entity.user.HistorialRutinaVersion;
 import com.pulse_gym.lb_common.entity.user.PlanNutricionalIA;
 import com.pulse_gym.lb_common.entity.user.RutinaIA;
 import com.pulse_gym.lb_common.entity.user.SesionEntrenamiento;
@@ -42,6 +44,7 @@ import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.repository.DetalleRutinaRepository;
 import com.pulse_gym.ms_users.repository.DetalleSesionEjercicioRepository;
 import com.pulse_gym.ms_users.repository.EntrenadorSocioRepository;
+import com.pulse_gym.ms_users.repository.HistorialRutinaVersionRepository;
 import com.pulse_gym.ms_users.repository.PlanNutricionalRepository;
 import com.pulse_gym.ms_users.repository.RutinaRepository;
 import com.pulse_gym.ms_users.repository.SesionEntrenamientoRepository;
@@ -79,6 +82,13 @@ public class SeguimientoService {
 
     /** Repositorio de planes nutricionales */
     private final PlanNutricionalRepository planNutricionalRepository;
+
+    /** ObjectMapper para conversiones de objetos */
+    private final ObjectMapper objectMapper;
+
+    /** Repositorio de historial de versiones de rutinas */
+    private final HistorialRutinaVersionRepository historialRutinaVersionRepository;
+
 
     /**
      * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
@@ -630,6 +640,36 @@ public class SeguimientoService {
         exportDTO.setVersion(rutina.getVersion());
         exportDTO.setGeneradaPorIA(rutina.getModeloIa() != null);
 
+        try {
+            List<HistorialRutinaVersion> historial = historialRutinaVersionRepository
+                    .findByRutinaIa_IdRutinaIaOrderByVersionDesc(rutina.getIdRutinaIa());
+
+            if (historial != null && !historial.isEmpty()) {
+                HistorialRutinaVersion ultimo = historial.get(0);
+                if (ultimo.getVersion() > 1 ||
+                        (ultimo.getModificadoPor() != null) ||
+                        (ultimo.getModificadoPorNombre() != null && !ultimo.getModificadoPorNombre().isEmpty())) {
+
+                    String modificador = null;
+                    if (ultimo.getModificadoPor() != null) {
+                        modificador = ultimo.getModificadoPor().getEmail();
+                    } else if (ultimo.getModificadoPorNombre() != null) {
+                        modificador = ultimo.getModificadoPorNombre();
+                    }
+
+                    if (modificador == null && ultimo.getVersion() > 1) {
+                        modificador = "Sistema";
+                    }
+
+                    exportDTO.setModificadoPor(modificador);
+                    exportDTO.setFechaModificacion(ultimo.getFechaModificacion());
+                    exportDTO.setMotivoModificacion(ultimo.getMotivo());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error al obtener historial para auditoría: {}", e.getMessage());
+        }
+
         List<DetalleRutinaExportacionDTO> detalles = new ArrayList<>();
         if (rutina.getDetalles() != null) {
             for (DetalleRutina detalle : rutina.getDetalles()) {
@@ -663,8 +703,8 @@ public class SeguimientoService {
      * Exporta un plan nutricional a formato PDF con validación de permisos
      * 
      * @param idSocio   ID del socio dueño del plan
-     * @param idPlan    ID del plan a exportar (opcional, si es null se usa el
-     *                  activo)
+     * @param idPlan    ID del plan nutricional a exportar (opcional, si es null se
+     *                  usa el activo)
      * @param userRol   Rol del usuario autenticado
      * @param userEmail Email del usuario autenticado
      * @return Array de bytes del PDF generado
@@ -712,67 +752,52 @@ public class SeguimientoService {
         exportDTO.setVersion(plan.getVersion());
         exportDTO.setGeneradoPorIA(plan.getModeloIa() != null);
         exportDTO.setCaloriasDiarias(plan.getCaloriasDiarias());
-        exportDTO.setProteinasG(plan.getProteinasG() != null ? plan.getProteinasG().doubleValue() : null);
-        exportDTO.setCarbohidratosG(plan.getCarbohidratosG() != null ? plan.getCarbohidratosG().doubleValue() : null);
-        exportDTO.setGrasasG(plan.getGrasasG() != null ? plan.getGrasasG().doubleValue() : null);
-        exportDTO.setRestriccionesDieteticas(plan.getRestriccionesDieteticas());
+        exportDTO.setProteinasG(plan.getProteinasG() != null ? plan.getProteinasG().doubleValue() : 0.0);
+        exportDTO.setCarbohidratosG(plan.getCarbohidratosG() != null ? plan.getCarbohidratosG().doubleValue() : 0.0);
+        exportDTO.setGrasasG(plan.getGrasasG() != null ? plan.getGrasasG().doubleValue() : 0.0);
 
-        String explicacionIA = null;
-        if (plan.getPlanGenerado() != null && !plan.getPlanGenerado().isEmpty()) {
+        if (plan.getRestriccionesDieteticas() != null && !plan.getRestriccionesDieteticas().isEmpty()) {
+            exportDTO.setRestriccionesDieteticas(plan.getRestriccionesDieteticas());
+        } else {
+            exportDTO.setRestriccionesDieteticas("Sin restricciones dietéticas");
+        }
+
+        exportDTO.setExplicacionIA(plan.getExplicacionIA());
+
+        exportDTO.setModificadoPor(plan.getModificadoPor());
+        exportDTO.setFechaModificacion(plan.getFechaModificacion());
+        exportDTO.setMotivoModificacion(plan.getMotivoModificacion());
+
+        Map<String, List<SugerenciaComidaExportacionDTO>> sugerenciasExport = new HashMap<>();
+        if (plan.getSugerenciasComidas() != null && !plan.getSugerenciasComidas().isEmpty()) {
             try {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode root = mapper.readTree(plan.getPlanGenerado());
-                if (root.has("explicacion_ia")) {
-                    explicacionIA = root.get("explicacion_ia").asText();
+                Map<String, List<SugerenciaComidaDTO>> sugerenciasMap = objectMapper.readValue(
+                        plan.getSugerenciasComidas(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, List<SugerenciaComidaDTO>>>() {
+                        });
+
+                for (Map.Entry<String, List<SugerenciaComidaDTO>> entry : sugerenciasMap.entrySet()) {
+                    List<SugerenciaComidaExportacionDTO> listaExport = new ArrayList<>();
+                    for (SugerenciaComidaDTO item : entry.getValue()) {
+                        SugerenciaComidaExportacionDTO exportItem = new SugerenciaComidaExportacionDTO();
+                        exportItem.setNombre(item.getNombre());
+                        exportItem.setDescripcion(item.getDescripcion());
+                        exportItem.setCalorias(item.getCalorias() != null ? item.getCalorias().intValue() : 0);
+                        exportItem.setIngredientes(item.getIngredientes());
+                        exportItem.setPreparacion(item.getPreparacion());
+                        exportItem.setProteinas(item.getProteinas() != null ? item.getProteinas().doubleValue() : 0.0);
+                        exportItem.setCarbohidratos(
+                                item.getCarbohidratos() != null ? item.getCarbohidratos().doubleValue() : 0.0);
+                        exportItem.setGrasas(item.getGrasas() != null ? item.getGrasas().doubleValue() : 0.0);
+                        listaExport.add(exportItem);
+                    }
+                    sugerenciasExport.put(entry.getKey(), listaExport);
                 }
             } catch (Exception e) {
-                log.warn("No se pudo parsear el JSON del plan nutricional: {}", e.getMessage());
+                log.error("Error al parsear sugerencias de comidas: {}", e.getMessage());
             }
         }
-        exportDTO.setExplicacionIA(explicacionIA);
-
-        Map<String, List<SugerenciaComidaExportacionDTO>> sugerencias = new HashMap<>();
-        if (plan.getPlanGenerado() != null && !plan.getPlanGenerado().isEmpty()) {
-            try {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode root = mapper.readTree(plan.getPlanGenerado());
-                if (root.has("sugerencias_comidas")) {
-                    JsonNode sugerenciasNode = root.get("sugerencias_comidas");
-                    sugerenciasNode.fields().forEachRemaining(entry -> {
-                        String tipo = entry.getKey();
-                        JsonNode comidasNode = entry.getValue();
-                        List<SugerenciaComidaExportacionDTO> comidas = new ArrayList<>();
-
-                        if (comidasNode.isArray()) {
-                            for (JsonNode comidaNode : comidasNode) {
-                                SugerenciaComidaExportacionDTO comida = new SugerenciaComidaExportacionDTO();
-                                comida.setNombre(comidaNode.has("nombre") ? comidaNode.get("nombre").asText() : null);
-                                comida.setDescripcion(
-                                        comidaNode.has("descripcion") ? comidaNode.get("descripcion").asText() : null);
-                                comida.setCalorias(
-                                        comidaNode.has("calorias") ? comidaNode.get("calorias").asInt() : null);
-                                comida.setIngredientes(
-                                        comidaNode.has("ingredientes") ? comidaNode.get("ingredientes").asText()
-                                                : null);
-                                comida.setPreparacion(
-                                        comidaNode.has("preparacion") ? comidaNode.get("preparacion").asText() : null);
-                                comida.setProteinas(
-                                        comidaNode.has("proteinas") ? comidaNode.get("proteinas").asDouble() : null);
-                                comida.setCarbohidratos(
-                                        comidaNode.has("carbohidratos") ? comidaNode.get("carbohidratos").asDouble()
-                                                : null);
-                                comida.setGrasas(comidaNode.has("grasas") ? comidaNode.get("grasas").asDouble() : null);
-                                comidas.add(comida);
-                            }
-                        }
-                        sugerencias.put(tipo, comidas);
-                    });
-                }
-            } catch (Exception e) {
-                log.warn("No se pudo parsear las sugerencias de comidas del JSON: {}", e.getMessage());
-            }
-        }
-        exportDTO.setSugerenciasComidas(sugerencias);
+        exportDTO.setSugerenciasComidas(sugerenciasExport);
 
         try {
             return exportacionPdfService.exportarPlanNutricionalPdf(exportDTO);
@@ -781,5 +806,4 @@ public class SeguimientoService {
             throw new RuntimeException("Error al generar el PDF del plan nutricional", e);
         }
     }
-
 }
