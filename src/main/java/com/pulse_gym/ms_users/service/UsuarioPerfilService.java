@@ -5,6 +5,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
 import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
 import com.pulse_gym.lb_common.enums.EnumEventoAsociado;
+import com.pulse_gym.lb_common.enums.EnumNivelExperiencia;
 import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
@@ -104,7 +106,8 @@ public class UsuarioPerfilService {
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
                 String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) hexString.append('0');
+                if (hex.length() == 1)
+                    hexString.append('0');
                 hexString.append(hex);
             }
             return hexString.toString();
@@ -143,6 +146,84 @@ public class UsuarioPerfilService {
     }
 
     /**
+     * Valida los campos obligatorios según el rol del usuario.
+     * 
+     * @param request DTO con los datos del perfil a completar
+     * @param userRol Rol del usuario autenticado
+     */
+    private void validarCamposPorRol(CompletarPerfilRequestDTO request, String userRol) {
+        if (request.getNombre() == null || request.getNombre().isEmpty()) {
+            throw new RuntimeException("El nombre es obligatorio");
+        }
+        if (request.getApellido() == null || request.getApellido().isEmpty()) {
+            throw new RuntimeException("El apellido es obligatorio");
+        }
+        if (request.getDocumentoIdentidad() == null || request.getDocumentoIdentidad().isEmpty()) {
+            throw new RuntimeException("El documento de identidad es obligatorio");
+        }
+        if (request.getFotoUrl() == null || request.getFotoUrl().isEmpty()) {
+            throw new RuntimeException("La URL de la foto es obligatoria");
+        }
+        if (request.getFechaNacimiento() == null) {
+            throw new RuntimeException("La fecha de nacimiento es obligatoria");
+        }
+        if (request.getContactoEmergenciaNombre() == null || request.getContactoEmergenciaNombre().isEmpty()) {
+            throw new RuntimeException("El nombre del contacto de emergencia es obligatorio");
+        }
+        if (request.getContactoEmergenciaTelefono() == null || request.getContactoEmergenciaTelefono().isEmpty()) {
+            throw new RuntimeException("El teléfono del contacto de emergencia es obligatorio");
+        }
+        if (request.getIdSede() == null) {
+            throw new RuntimeException("El ID de la sede es obligatorio");
+        }
+
+        if (EnumRol.socio.name().equals(userRol) || EnumRol.entrenador.name().equals(userRol)) {
+            if (request.getObjetivoPrincipal() == null || request.getObjetivoPrincipal().isEmpty()) {
+                throw new RuntimeException("El objetivo principal es obligatorio para socios y entrenadores");
+            }
+            if (request.getNivelExperiencia() == null) {
+                throw new RuntimeException("El nivel de experiencia es obligatorio para socios y entrenadores");
+            }
+        }
+
+        if (EnumRol.entrenador.name().equals(userRol)) {
+            if (request.getFechaContratacion() == null) {
+                throw new RuntimeException("La fecha de contratación es obligatoria para entrenadores");
+            }
+            if (request.getEspecialidad() == null || request.getEspecialidad().isEmpty()) {
+                throw new RuntimeException("La especialidad es obligatoria para entrenadores");
+            }
+            if (request.getAnosExperiencia() == null) {
+                throw new RuntimeException("Los años de experiencia son obligatorios para entrenadores");
+            }
+            if (request.getHorarioDisponibilidad() == null || request.getHorarioDisponibilidad().isEmpty()) {
+                throw new RuntimeException("El horario de disponibilidad es obligatorio para entrenadores");
+            }
+            if (request.getTarifaHora() == null) {
+                throw new RuntimeException("La tarifa por hora es obligatoria para entrenadores");
+            }
+            if (request.getTurno() == null) {
+                throw new RuntimeException("El turno es obligatorio para entrenadores");
+            }
+        }
+
+        if (EnumRol.administrador.name().equals(userRol)) {
+            if (request.getFechaContratacion() == null) {
+                throw new RuntimeException("La fecha de contratación es obligatoria para administradores");
+            }
+        }
+
+        if (EnumRol.recepcionista.name().equals(userRol)) {
+            if (request.getFechaContratacion() == null) {
+                throw new RuntimeException("La fecha de contratación es obligatoria para recepcionistas");
+            }
+            if (request.getTurno() == null) {
+                throw new RuntimeException("El turno es obligatorio para recepcionistas");
+            }
+        }
+    }
+
+    /**
      * Completa el perfil de un usuario que ya existe en el sistema de autenticación
      * 
      * @param email      Email del usuario (identificador único)
@@ -153,7 +234,7 @@ public class UsuarioPerfilService {
      * @return Mensaje de confirmación
      */
     @Transactional
-    public MessegeGlobalDTO completarPerfil(String email, CompletarPerfilRequestDTO requestDTO,
+    public MessegeGlobalDTO completarPerfil(String email, CompletarPerfilRequestDTO request,
             String userRol, String userEmail) {
 
         if (!userEmail.equals(email)) {
@@ -164,30 +245,76 @@ public class UsuarioPerfilService {
             throw new RuntimeException("El usuario ya tiene un perfil completado");
         }
 
+        validarCamposPorRol(request, userRol);
+
         UsuarioPerfil usuario = new UsuarioPerfil();
         usuario.setEmail(email);
-        usuario.setNombre(requestDTO.getNombre());
-        usuario.setApellido(requestDTO.getApellido());
-        usuario.setTelefono(requestDTO.getTelefono());
-        usuario.setDocumentoIdentidad(requestDTO.getDocumentoIdentidad());
-        usuario.setFotoUrl(requestDTO.getFotoUrl());
-        usuario.setFechaContratacion(requestDTO.getFechaContratacion());
-        usuario.setEspecialidad(requestDTO.getEspecialidad());
-        usuario.setAnosExperiencia(requestDTO.getAnosExperiencia());
-        usuario.setHorarioDisponibilidad(requestDTO.getHorarioDisponibilidad());
-        usuario.setTarifaHora(requestDTO.getTarifaHora());
-        usuario.setTurno(requestDTO.getTurno());
-        usuario.setFechaNacimiento(requestDTO.getFechaNacimiento());
-        usuario.setContactoEmergenciaNombre(requestDTO.getContactoEmergenciaNombre());
-        usuario.setContactoEmergenciaTelefono(requestDTO.getContactoEmergenciaTelefono());
-        usuario.setObjetivoPrincipal(requestDTO.getObjetivoPrincipal());
-        usuario.setNivelExperiencia(requestDTO.getNivelExperiencia());
-        usuario.setIdSede(requestDTO.getIdSede());
+        usuario.setNombre(request.getNombre());
+        usuario.setApellido(request.getApellido());
+        usuario.setTelefono(request.getTelefono());
+        usuario.setDocumentoIdentidad(request.getDocumentoIdentidad());
+        usuario.setFotoUrl(request.getFotoUrl());
+        usuario.setFechaNacimiento(request.getFechaNacimiento());
+        usuario.setContactoEmergenciaNombre(request.getContactoEmergenciaNombre());
+        usuario.setContactoEmergenciaTelefono(request.getContactoEmergenciaTelefono());
+        usuario.setIdSede(request.getIdSede());
+
         usuario.setEstado(EnumEstadoUsuario.ACTIVO);
 
+        if (EnumRol.socio.name().equals(userRol)) {
+            usuario.setObjetivoPrincipal(request.getObjetivoPrincipal());
+            usuario.setNivelExperiencia(request.getNivelExperiencia());
+            usuario.setEspecialidad(null);
+            usuario.setAnosExperiencia(null);
+            usuario.setHorarioDisponibilidad(null);
+            usuario.setTarifaHora(null);
+            usuario.setTurno(null);
+            usuario.setFechaContratacion(null);
+        } else if (EnumRol.entrenador.name().equals(userRol)) {
+            usuario.setObjetivoPrincipal(request.getObjetivoPrincipal());
+            usuario.setNivelExperiencia(request.getNivelExperiencia());
+            usuario.setEspecialidad(request.getEspecialidad());
+            usuario.setAnosExperiencia(request.getAnosExperiencia());
+            usuario.setHorarioDisponibilidad(request.getHorarioDisponibilidad());
+            usuario.setTarifaHora(request.getTarifaHora());
+            usuario.setTurno(request.getTurno());
+            usuario.setFechaContratacion(request.getFechaContratacion());
+        } else if (EnumRol.administrador.name().equals(userRol)) {
+            usuario.setFechaContratacion(request.getFechaContratacion());
+            usuario.setEspecialidad(null);
+            usuario.setAnosExperiencia(null);
+            usuario.setHorarioDisponibilidad(null);
+            usuario.setTarifaHora(null);
+            usuario.setTurno(null);
+            usuario.setObjetivoPrincipal(null);
+            usuario.setNivelExperiencia(EnumNivelExperiencia.intermedio);
+        } else if (EnumRol.recepcionista.name().equals(userRol)) {
+            usuario.setFechaContratacion(request.getFechaContratacion());
+            usuario.setTurno(request.getTurno());
+            usuario.setEspecialidad(null);
+            usuario.setAnosExperiencia(null);
+            usuario.setHorarioDisponibilidad(null);
+            usuario.setTarifaHora(null);
+            usuario.setObjetivoPrincipal(null);
+            usuario.setNivelExperiencia(EnumNivelExperiencia.intermedio);
+        } else {
+            throw new SecurityAuthorizationException("Rol no válido para completar perfil");
+        }
+
+        try {
+            usuarioRepository.save(usuario);
+        } catch (DataIntegrityViolationException e) {
+            String errorMessage = e.getMostSpecificCause().getMessage();
+            if (errorMessage.contains("documento_identidad")) {
+                throw new RuntimeException("El documento de identidad ya está registrado por otro usuario");
+            } else if (errorMessage.contains("email")) {
+                throw new RuntimeException("El email ya está registrado por otro usuario");
+            } else {
+                throw new RuntimeException("Error de integridad de datos: " + errorMessage);
+            }
+        }
         usuarioRepository.save(usuario);
 
-        // Enviar correo de bienvenida
         enviarNotificacionBienvenida(usuario);
 
         return new MessegeGlobalDTO("Perfil completado correctamente");
@@ -621,10 +748,12 @@ public class UsuarioPerfilService {
      * @param idUsuario         ID del usuario (socio)
      * @param request           DTO con el deviceId
      * @param userRol           Rol del usuario autenticado
-     * @param userIdAutenticado ID del usuario autenticado (para validar que solo se registre su propia huella)
+     * @param userIdAutenticado ID del usuario autenticado (para validar que solo se
+     *                          registre su propia huella)
      * @return Mensaje de confirmación
      * @throws SecurityAuthorizationException Si el usuario no tiene permisos
-     * @throws RuntimeException Si la huella no es válida o el usuario no es socio
+     * @throws RuntimeException               Si la huella no es válida o el usuario
+     *                                        no es socio
      */
     @Transactional
     public MessegeGlobalDTO registrarHuella(Long idUsuario, RegistroHuellaRequestDTO request, String userRol,
@@ -647,7 +776,8 @@ public class UsuarioPerfilService {
 
         if (!validarCalidadHuella(request.getDeviceId())) {
             log.warn("Intento de registro de huella con calidad insuficiente para usuario ID: {}", idUsuario);
-            throw new RuntimeException("La calidad de la huella no es suficiente. Intente nuevamente con una captura más clara.");
+            throw new RuntimeException(
+                    "La calidad de la huella no es suficiente. Intente nuevamente con una captura más clara.");
         }
 
         // 4. Generar hash del deviceId
@@ -660,7 +790,8 @@ public class UsuarioPerfilService {
         usuario.setBiometricDeviceId(hashDeviceId);
         usuarioRepository.save(usuario);
 
-        log.info("Huella registrada correctamente para usuario ID: {} (hash: {})", idUsuario, hashDeviceId.substring(0, 10) + "...");
+        log.info("Huella registrada correctamente para usuario ID: {} (hash: {})", idUsuario,
+                hashDeviceId.substring(0, 10) + "...");
         return new MessegeGlobalDTO("Huella registrada correctamente");
     }
 
@@ -696,7 +827,8 @@ public class UsuarioPerfilService {
 
         if (!validarCalidadHuella(request.getDeviceId())) {
             log.warn("Intento de reemplazo de huella con calidad insuficiente para usuario ID: {}", idUsuario);
-            throw new RuntimeException("La calidad de la huella no es suficiente. Intente nuevamente con una captura más clara.");
+            throw new RuntimeException(
+                    "La calidad de la huella no es suficiente. Intente nuevamente con una captura más clara.");
         }
 
         String hashDeviceId = generarHashDeviceId(request.getDeviceId());
