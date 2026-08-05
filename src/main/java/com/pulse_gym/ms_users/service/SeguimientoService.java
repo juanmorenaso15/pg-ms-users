@@ -31,6 +31,7 @@ import com.pulse_gym.lb_common.dto.SugerenciaComidaExportacionDTO;
 import com.pulse_gym.lb_common.entity.user.DetalleRutina;
 import com.pulse_gym.lb_common.entity.user.DetalleSesionEjercicio;
 import com.pulse_gym.lb_common.entity.user.EntrenadorSocio;
+import com.pulse_gym.lb_common.entity.user.HistorialRutinaVersion;
 import com.pulse_gym.lb_common.entity.user.PlanNutricionalIA;
 import com.pulse_gym.lb_common.entity.user.RutinaIA;
 import com.pulse_gym.lb_common.entity.user.SesionEntrenamiento;
@@ -43,6 +44,7 @@ import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.repository.DetalleRutinaRepository;
 import com.pulse_gym.ms_users.repository.DetalleSesionEjercicioRepository;
 import com.pulse_gym.ms_users.repository.EntrenadorSocioRepository;
+import com.pulse_gym.ms_users.repository.HistorialRutinaVersionRepository;
 import com.pulse_gym.ms_users.repository.PlanNutricionalRepository;
 import com.pulse_gym.ms_users.repository.RutinaRepository;
 import com.pulse_gym.ms_users.repository.SesionEntrenamientoRepository;
@@ -83,6 +85,10 @@ public class SeguimientoService {
 
     /** ObjectMapper para conversiones de objetos */
     private final ObjectMapper objectMapper;
+
+    /** Repositorio de historial de versiones de rutinas */
+    private final HistorialRutinaVersionRepository historialRutinaVersionRepository;
+
 
     /**
      * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
@@ -633,6 +639,36 @@ public class SeguimientoService {
         exportDTO.setFechaGeneracion(rutina.getFechaGeneracion());
         exportDTO.setVersion(rutina.getVersion());
         exportDTO.setGeneradaPorIA(rutina.getModeloIa() != null);
+
+        try {
+            List<HistorialRutinaVersion> historial = historialRutinaVersionRepository
+                    .findByRutinaIa_IdRutinaIaOrderByVersionDesc(rutina.getIdRutinaIa());
+
+            if (historial != null && !historial.isEmpty()) {
+                HistorialRutinaVersion ultimo = historial.get(0);
+                if (ultimo.getVersion() > 1 ||
+                        (ultimo.getModificadoPor() != null) ||
+                        (ultimo.getModificadoPorNombre() != null && !ultimo.getModificadoPorNombre().isEmpty())) {
+
+                    String modificador = null;
+                    if (ultimo.getModificadoPor() != null) {
+                        modificador = ultimo.getModificadoPor().getEmail();
+                    } else if (ultimo.getModificadoPorNombre() != null) {
+                        modificador = ultimo.getModificadoPorNombre();
+                    }
+
+                    if (modificador == null && ultimo.getVersion() > 1) {
+                        modificador = "Sistema";
+                    }
+
+                    exportDTO.setModificadoPor(modificador);
+                    exportDTO.setFechaModificacion(ultimo.getFechaModificacion());
+                    exportDTO.setMotivoModificacion(ultimo.getMotivo());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error al obtener historial para auditoría: {}", e.getMessage());
+        }
 
         List<DetalleRutinaExportacionDTO> detalles = new ArrayList<>();
         if (rutina.getDetalles() != null) {

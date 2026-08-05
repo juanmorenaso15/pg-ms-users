@@ -153,10 +153,10 @@ public class RutinaService {
         dto.setMotivo(historial.getMotivo());
         dto.setFechaModificacion(historial.getFechaModificacion());
 
-        if (historial.getModificadoPor() != null) {
-            dto.setModificadoPor(historial.getModificadoPor().getEmail());
-        } else if (historial.getModificadoPorNombre() != null) {
+        if (historial.getModificadoPorNombre() != null && !historial.getModificadoPorNombre().isEmpty()) {
             dto.setModificadoPor(historial.getModificadoPorNombre());
+        } else if (historial.getModificadoPor() != null) {
+            dto.setModificadoPor(historial.getModificadoPor().getEmail());
         } else {
             dto.setModificadoPor("Sistema");
         }
@@ -164,6 +164,11 @@ public class RutinaService {
         return dto;
     }
 
+    /**
+     * Guarda el historial de la versión inicial de la rutina
+     * 
+     * @param rutina Rutina recién generada
+     */
     /**
      * Guarda el historial de la versión inicial de la rutina
      * 
@@ -180,6 +185,7 @@ public class RutinaService {
             historial.setDatosJson(rutinaJson);
             historial.setMotivo("Generación inicial");
             historial.setFechaModificacion(rutina.getFechaGeneracion());
+            historial.setModificadoPorNombre("Sistema");
             historialRutinaVersionRepository.save(historial);
 
             log.info("Historial inicial guardado para rutina ID: {}", rutina.getIdRutinaIa());
@@ -192,6 +198,7 @@ public class RutinaService {
                 historial.setDatosJson(rutina.getRutinaGenerada());
                 historial.setMotivo("Generación inicial (fallback)");
                 historial.setFechaModificacion(rutina.getFechaGeneracion());
+                historial.setModificadoPorNombre("Sistema"); // 🔥 VALOR POR DEFECTO
                 historialRutinaVersionRepository.save(historial);
                 log.info("Historial inicial guardado con fallback para rutina ID: {}", rutina.getIdRutinaIa());
             } catch (Exception ex) {
@@ -221,17 +228,22 @@ public class RutinaService {
             historial.setMotivo(motivo != null ? motivo : "Ajuste manual - Versión " + rutina.getVersion());
 
             if (modificadoPor != null && !modificadoPor.isEmpty()) {
-                String email = modificadoPor.contains("(")
-                        ? modificadoPor.substring(modificadoPor.indexOf("(") + 1, modificadoPor.indexOf(")"))
-                        : modificadoPor;
-                usuarioRepository.findByEmail(email).ifPresent(historial::setModificadoPor);
+                historial.setModificadoPorNombre(modificadoPor);
+
+                if (modificadoPor.contains("(")) {
+                    String email = modificadoPor.substring(modificadoPor.indexOf("(") + 1, modificadoPor.indexOf(")"));
+                    usuarioRepository.findByEmail(email).ifPresent(historial::setModificadoPor);
+                }
+            } else {
+                historial.setModificadoPorNombre("Sistema");
             }
 
             historial.setFechaModificacion(LocalDateTime.now());
             historialRutinaVersionRepository.save(historial);
 
-            log.info("Historial guardado para rutina ID: {}, versión: {}",
-                    rutina.getIdRutinaIa(), rutina.getVersion());
+            log.info("Historial guardado para rutina ID: {}, versión: {}, modificado por: {}",
+                    rutina.getIdRutinaIa(), rutina.getVersion(),
+                    historial.getModificadoPorNombre() != null ? historial.getModificadoPorNombre() : "Sistema");
         } catch (JsonProcessingException e) {
             log.error("Error al serializar JSON para historial: {}", e.getMessage());
             try {
@@ -243,10 +255,9 @@ public class RutinaService {
                         motivo != null ? motivo : "Ajuste manual - Versión " + rutina.getVersion() + " (fallback)");
 
                 if (modificadoPor != null && !modificadoPor.isEmpty()) {
-                    String email = modificadoPor.contains("(")
-                            ? modificadoPor.substring(modificadoPor.indexOf("(") + 1, modificadoPor.indexOf(")"))
-                            : modificadoPor;
-                    usuarioRepository.findByEmail(email).ifPresent(historial::setModificadoPor);
+                    historial.setModificadoPorNombre(modificadoPor);
+                } else {
+                    historial.setModificadoPorNombre("Sistema");
                 }
 
                 historial.setFechaModificacion(LocalDateTime.now());
@@ -593,9 +604,9 @@ public class RutinaService {
             throw new RuntimeException("El detalle no pertenece a esta rutina");
         }
 
-        String nombreModificador = userEmail;
+        String nombreModificador = "Sistema";
         try {
-            if (userEmail != null) {
+            if (userEmail != null && !userEmail.isEmpty()) {
                 UsuarioPerfil usuario = usuarioRepository.findByEmail(userEmail).orElse(null);
                 if (usuario != null) {
                     nombreModificador = usuario.getNombre() + " " + usuario.getApellido();

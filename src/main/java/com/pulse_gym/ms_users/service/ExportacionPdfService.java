@@ -97,6 +97,59 @@ public class ExportacionPdfService {
 
         document.add(headerTable);
 
+        if (rutina.getModificadoPor() != null && !rutina.getModificadoPor().isEmpty()) {
+            document.add(new Paragraph(" ")
+                    .setBorderBottom(Border.NO_BORDER)
+                    .setMarginTop(0));
+
+            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
+                    .setWidth(UnitValue.createPercentValue(100))
+                    .setMarginBottom(10);
+
+            Cell modLabel = new Cell();
+            modLabel.add(new Paragraph("Última modificación:").setBold().setFontSize(10));
+            modLabel.setBorder(Border.NO_BORDER);
+            modLabel.setWidth(UnitValue.createPercentValue(25));
+            modTable.addCell(modLabel);
+
+            String modInfo = "Por: " + rutina.getModificadoPor();
+            if (rutina.getFechaModificacion() != null) {
+                modInfo += " | Fecha: " + rutina.getFechaModificacion()
+                        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+            }
+            if (rutina.getMotivoModificacion() != null && !rutina.getMotivoModificacion().isEmpty()) {
+                modInfo += " | Motivo: " + rutina.getMotivoModificacion();
+            }
+            Cell modValue = new Cell();
+            modValue.add(new Paragraph(modInfo).setFontSize(10).setFontColor(new DeviceRgb(80, 80, 80)));
+            modValue.setBorder(Border.NO_BORDER);
+            modTable.addCell(modValue);
+
+            document.add(modTable);
+        } else {
+            document.add(new Paragraph(" ")
+                    .setBorderBottom(Border.NO_BORDER)
+                    .setMarginTop(0));
+
+            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
+                    .setWidth(UnitValue.createPercentValue(100))
+                    .setMarginBottom(10);
+
+            Cell modLabel = new Cell();
+            modLabel.add(new Paragraph("Estado:").setBold().setFontSize(10));
+            modLabel.setBorder(Border.NO_BORDER);
+            modLabel.setWidth(UnitValue.createPercentValue(25));
+            modTable.addCell(modLabel);
+
+            Cell modValue = new Cell();
+            modValue.add(new Paragraph("Rutina original - Sin modificaciones").setFontSize(10)
+                    .setFontColor(new DeviceRgb(80, 80, 80)));
+            modValue.setBorder(Border.NO_BORDER);
+            modTable.addCell(modValue);
+
+            document.add(modTable);
+        }
+
         document.add(new Paragraph("DESCRIPCIÓN")
                 .setFont(fontSubtitulo)
                 .setFontSize(14)
@@ -173,20 +226,15 @@ public class ExportacionPdfService {
                 table.addCell(createCell(reps, TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg"
-                                : "-",
+                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg" : "-",
                         TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getDescansoSegundos() != null
-                                ? detalle.getDescansoSegundos() + "s"
-                                : "-",
+                        detalle.getDescansoSegundos() != null ? detalle.getDescansoSegundos() + "s" : "-",
                         TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getNotas() != null && !detalle.getNotas().isEmpty()
-                                ? detalle.getNotas()
-                                : "-",
+                        detalle.getNotas() != null && !detalle.getNotas().isEmpty() ? detalle.getNotas() : "-",
                         TextAlignment.LEFT, 8));
 
                 orden++;
@@ -227,7 +275,6 @@ public class ExportacionPdfService {
                 .setBorder(Border.NO_BORDER)
                 .setBackgroundColor(DeviceRgb.WHITE);
     }
-
 
     /**
      * Exporta un plan nutricional a formato PDF
