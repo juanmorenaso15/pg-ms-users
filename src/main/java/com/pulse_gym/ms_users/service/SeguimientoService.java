@@ -84,7 +84,6 @@ public class SeguimientoService {
     /** ObjectMapper para conversiones de objetos */
     private final ObjectMapper objectMapper;
 
-
     /**
      * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
      * 
@@ -668,8 +667,8 @@ public class SeguimientoService {
      * Exporta un plan nutricional a formato PDF con validación de permisos
      * 
      * @param idSocio   ID del socio dueño del plan
-     * @param idPlan    ID del plan a exportar (opcional, si es null se usa el
-     *                  activo)
+     * @param idPlan    ID del plan nutricional a exportar (opcional, si es null se
+     *                  usa el activo)
      * @param userRol   Rol del usuario autenticado
      * @param userEmail Email del usuario autenticado
      * @return Array de bytes del PDF generado
@@ -678,7 +677,6 @@ public class SeguimientoService {
         UsuarioPerfil socio = usuarioRepository.findById(idSocio)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
 
-        // Validar permisos
         if (EnumRol.socio.name().equals(userRol)) {
             UsuarioPerfil autenticado = usuarioRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new RuntimeException("Usuario no autenticado"));
@@ -697,7 +695,6 @@ public class SeguimientoService {
             throw new SecurityAuthorizationException("No tiene permisos para exportar este plan nutricional");
         }
 
-        // Obtener el plan nutricional
         PlanNutricionalIA plan;
         if (idPlan != null) {
             plan = planNutricionalRepository.findById(idPlan)
@@ -710,7 +707,6 @@ public class SeguimientoService {
                     .orElseThrow(() -> new RuntimeException("El socio no tiene un plan nutricional activo"));
         }
 
-        // Construir DTO de exportación
         PlanNutricionalExportacionDTO exportDTO = new PlanNutricionalExportacionDTO();
         exportDTO.setIdPlan(plan.getIdPlanNutricional());
         exportDTO.setNombreSocio(socio.getNombre());
@@ -724,17 +720,18 @@ public class SeguimientoService {
         exportDTO.setCarbohidratosG(plan.getCarbohidratosG() != null ? plan.getCarbohidratosG().doubleValue() : 0.0);
         exportDTO.setGrasasG(plan.getGrasasG() != null ? plan.getGrasasG().doubleValue() : 0.0);
 
-        // ✅ CAMBIO 1: Usar el campo guardado en la entidad
         if (plan.getRestriccionesDieteticas() != null && !plan.getRestriccionesDieteticas().isEmpty()) {
             exportDTO.setRestriccionesDieteticas(plan.getRestriccionesDieteticas());
         } else {
             exportDTO.setRestriccionesDieteticas("Sin restricciones dietéticas");
         }
 
-        // ✅ CAMBIO 2: Usar el campo explicacionIA guardado en la entidad
         exportDTO.setExplicacionIA(plan.getExplicacionIA());
 
-        // ✅ CAMBIO 3: Usar plan.getSugerenciasComidas() en lugar de parsear del JSON
+        exportDTO.setModificadoPor(plan.getModificadoPor());
+        exportDTO.setFechaModificacion(plan.getFechaModificacion());
+        exportDTO.setMotivoModificacion(plan.getMotivoModificacion());
+
         Map<String, List<SugerenciaComidaExportacionDTO>> sugerenciasExport = new HashMap<>();
         if (plan.getSugerenciasComidas() != null && !plan.getSugerenciasComidas().isEmpty()) {
             try {
@@ -761,8 +758,7 @@ public class SeguimientoService {
                     sugerenciasExport.put(entry.getKey(), listaExport);
                 }
             } catch (Exception e) {
-                log.error("Error al parsear sugerencias de comidas desde plan.getSugerenciasComidas(): {}",
-                        e.getMessage());
+                log.error("Error al parsear sugerencias de comidas: {}", e.getMessage());
             }
         }
         exportDTO.setSugerenciasComidas(sugerenciasExport);
