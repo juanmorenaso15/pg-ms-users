@@ -137,7 +137,19 @@ public class RutinaService {
         RutinaHistorialResponseDTO dto = new RutinaHistorialResponseDTO();
         dto.setIdHistorial(historial.getIdHistorial());
         dto.setVersion(historial.getVersion());
-        dto.setDatosJson(historial.getDatosJson());
+
+        try {
+            if (historial.getDatosJson() != null && !historial.getDatosJson().isEmpty()) {
+                Object jsonObject = objectMapper.readValue(historial.getDatosJson(), Object.class);
+                dto.setDatosJson(jsonObject);
+            } else {
+                dto.setDatosJson(null);
+            }
+        } catch (JsonProcessingException e) {
+            log.warn("Error al parsear datosJson: {}", e.getMessage());
+            dto.setDatosJson(historial.getDatosJson());
+        }
+
         dto.setMotivo(historial.getMotivo());
         dto.setFechaModificacion(historial.getFechaModificacion());
 
@@ -150,6 +162,103 @@ public class RutinaService {
         }
 
         return dto;
+    }
+
+    /**
+     * Guarda el historial de la versión inicial de la rutina
+     * 
+     * @param rutina Rutina recién generada
+     */
+    private void guardarHistorialVersionInicial(RutinaIA rutina) {
+        try {
+            RutinaGeneracionResponseDTO dto = convertirAResponseDTO(rutina);
+            String rutinaJson = objectMapper.writeValueAsString(dto);
+
+            HistorialRutinaVersion historial = new HistorialRutinaVersion();
+            historial.setRutinaIa(rutina);
+            historial.setVersion(1);
+            historial.setDatosJson(rutinaJson);
+            historial.setMotivo("Generación inicial");
+            historial.setFechaModificacion(rutina.getFechaGeneracion());
+            historialRutinaVersionRepository.save(historial);
+
+            log.info("Historial inicial guardado para rutina ID: {}", rutina.getIdRutinaIa());
+        } catch (JsonProcessingException e) {
+            log.error("Error al serializar JSON para historial: {}", e.getMessage());
+            try {
+                HistorialRutinaVersion historial = new HistorialRutinaVersion();
+                historial.setRutinaIa(rutina);
+                historial.setVersion(1);
+                historial.setDatosJson(rutina.getRutinaGenerada());
+                historial.setMotivo("Generación inicial (fallback)");
+                historial.setFechaModificacion(rutina.getFechaGeneracion());
+                historialRutinaVersionRepository.save(historial);
+                log.info("Historial inicial guardado con fallback para rutina ID: {}", rutina.getIdRutinaIa());
+            } catch (Exception ex) {
+                log.error("Error al guardar historial inicial con fallback: {}", ex.getMessage());
+            }
+        } catch (Exception e) {
+            log.error("Error al guardar historial inicial: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Guarda un registro en el historial de versiones de la rutina
+     * 
+     * @param rutina        Rutina que se está modificando
+     * @param modificadoPor Nombre del usuario que realizó la modificación
+     * @param motivo        Motivo de la modificación
+     */
+    private void guardarHistorialVersion(RutinaIA rutina, String modificadoPor, String motivo) {
+        try {
+            RutinaGeneracionResponseDTO dto = convertirAResponseDTO(rutina);
+            String rutinaJson = objectMapper.writeValueAsString(dto);
+
+            HistorialRutinaVersion historial = new HistorialRutinaVersion();
+            historial.setRutinaIa(rutina);
+            historial.setVersion(rutina.getVersion());
+            historial.setDatosJson(rutinaJson);
+            historial.setMotivo(motivo != null ? motivo : "Ajuste manual - Versión " + rutina.getVersion());
+
+            if (modificadoPor != null && !modificadoPor.isEmpty()) {
+                String email = modificadoPor.contains("(")
+                        ? modificadoPor.substring(modificadoPor.indexOf("(") + 1, modificadoPor.indexOf(")"))
+                        : modificadoPor;
+                usuarioRepository.findByEmail(email).ifPresent(historial::setModificadoPor);
+            }
+
+            historial.setFechaModificacion(LocalDateTime.now());
+            historialRutinaVersionRepository.save(historial);
+
+            log.info("Historial guardado para rutina ID: {}, versión: {}",
+                    rutina.getIdRutinaIa(), rutina.getVersion());
+        } catch (JsonProcessingException e) {
+            log.error("Error al serializar JSON para historial: {}", e.getMessage());
+            try {
+                HistorialRutinaVersion historial = new HistorialRutinaVersion();
+                historial.setRutinaIa(rutina);
+                historial.setVersion(rutina.getVersion());
+                historial.setDatosJson(rutina.getRutinaGenerada());
+                historial.setMotivo(
+                        motivo != null ? motivo : "Ajuste manual - Versión " + rutina.getVersion() + " (fallback)");
+
+                if (modificadoPor != null && !modificadoPor.isEmpty()) {
+                    String email = modificadoPor.contains("(")
+                            ? modificadoPor.substring(modificadoPor.indexOf("(") + 1, modificadoPor.indexOf(")"))
+                            : modificadoPor;
+                    usuarioRepository.findByEmail(email).ifPresent(historial::setModificadoPor);
+                }
+
+                historial.setFechaModificacion(LocalDateTime.now());
+                historialRutinaVersionRepository.save(historial);
+                log.info("Historial guardado con fallback para rutina ID: {}, versión: {}",
+                        rutina.getIdRutinaIa(), rutina.getVersion());
+            } catch (Exception ex) {
+                log.error("Error al guardar historial con fallback: {}", ex.getMessage());
+            }
+        } catch (Exception e) {
+            log.error("Error al guardar historial: {}", e.getMessage());
+        }
     }
 
     /**
@@ -261,27 +370,6 @@ public class RutinaService {
             }
         } catch (Exception e) {
             log.warn("Error al asignar socio a entrenador: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Guarda el historial de la versión inicial de la rutina
-     * 
-     * @param rutina Rutina recién generada
-     */
-    private void guardarHistorialVersionInicial(RutinaIA rutina) {
-        try {
-            HistorialRutinaVersion historial = new HistorialRutinaVersion();
-            historial.setRutinaIa(rutina);
-            historial.setVersion(1);
-            historial.setDatosJson(rutina.getRutinaGenerada());
-            historial.setMotivo("Generación inicial");
-            historial.setFechaModificacion(rutina.getFechaGeneracion());
-            historialRutinaVersionRepository.save(historial);
-
-            log.info("Historial inicial guardado para rutina ID: {}", rutina.getIdRutinaIa());
-        } catch (Exception e) {
-            log.error("Error al guardar historial inicial: {}", e.getMessage());
         }
     }
 
@@ -561,39 +649,6 @@ public class RutinaService {
     }
 
     /**
-     * Guarda un registro en el historial de versiones de la rutina
-     * 
-     * @param rutina        Rutina que se está modificando
-     * @param modificadoPor Nombre del usuario que realizó la modificación
-     * @param motivo        Motivo de la modificación
-     */
-    private void guardarHistorialVersion(RutinaIA rutina, String modificadoPor, String motivo) {
-        try {
-            HistorialRutinaVersion historial = new HistorialRutinaVersion();
-            historial.setRutinaIa(rutina);
-            historial.setVersion(rutina.getVersion());
-            historial.setDatosJson(rutina.getRutinaGenerada());
-            historial.setMotivo(motivo != null ? motivo : "Ajuste manual - Versión " + rutina.getVersion());
-
-            if (modificadoPor != null && !modificadoPor.isEmpty()) {
-                String email = modificadoPor.contains("(")
-                        ? modificadoPor.substring(modificadoPor.indexOf("(") + 1, modificadoPor.indexOf(")"))
-                        : modificadoPor;
-
-                usuarioRepository.findByEmail(email).ifPresent(historial::setModificadoPor);
-            }
-
-            historial.setFechaModificacion(LocalDateTime.now());
-            historialRutinaVersionRepository.save(historial);
-
-            log.info("Historial guardado para rutina ID: {}, versión: {}",
-                    rutina.getIdRutinaIa(), rutina.getVersion());
-        } catch (Exception e) {
-            log.error("Error al guardar historial de versión: {}", e.getMessage());
-        }
-    }
-
-    /**
      * 
      * Obtiene el historial de versiones de una rutina
      * 
@@ -627,19 +682,35 @@ public class RutinaService {
         if (historial.isEmpty()) {
             log.info("No hay historial para la rutina ID: {}, creando entrada inicial", idRutina);
 
-            HistorialRutinaVersion versionInicial = new HistorialRutinaVersion();
-            versionInicial.setRutinaIa(rutina);
-            versionInicial.setVersion(1);
-            versionInicial.setDatosJson(rutina.getRutinaGenerada());
-            versionInicial.setMotivo("Generación inicial");
-            versionInicial.setFechaModificacion(rutina.getFechaGeneracion());
+            try {
+                RutinaGeneracionResponseDTO dto = convertirAResponseDTO(rutina);
+                String rutinaJson = objectMapper.writeValueAsString(dto);
 
-            historialRutinaVersionRepository.save(versionInicial);
-            historial = List.of(versionInicial);
+                HistorialRutinaVersion versionInicial = new HistorialRutinaVersion();
+                versionInicial.setRutinaIa(rutina);
+                versionInicial.setVersion(1);
+                versionInicial.setDatosJson(rutinaJson);
+                versionInicial.setMotivo("Generación inicial");
+                versionInicial.setFechaModificacion(rutina.getFechaGeneracion());
+
+                historialRutinaVersionRepository.save(versionInicial);
+                historial = List.of(versionInicial);
+            } catch (JsonProcessingException e) {
+                log.error("Error al serializar JSON para historial inicial: {}", e.getMessage());
+                HistorialRutinaVersion versionInicial = new HistorialRutinaVersion();
+                versionInicial.setRutinaIa(rutina);
+                versionInicial.setVersion(1);
+                versionInicial.setDatosJson(rutina.getRutinaGenerada());
+                versionInicial.setMotivo("Generación inicial (fallback)");
+                versionInicial.setFechaModificacion(rutina.getFechaGeneracion());
+                historialRutinaVersionRepository.save(versionInicial);
+                historial = List.of(versionInicial);
+            }
         }
 
         return historial.stream()
                 .map(this::convertirHistorialAResponseDTO)
                 .collect(Collectors.toList());
     }
+
 }
