@@ -143,6 +143,8 @@ public class RutinaService {
 
         if (historial.getModificadoPor() != null) {
             dto.setModificadoPor(historial.getModificadoPor().getEmail());
+        } else if (historial.getModificadoPorNombre() != null) {
+            dto.setModificadoPor(historial.getModificadoPorNombre());
         } else {
             dto.setModificadoPor("Sistema");
         }
@@ -263,6 +265,27 @@ public class RutinaService {
     }
 
     /**
+     * Guarda el historial de la versión inicial de la rutina
+     * 
+     * @param rutina Rutina recién generada
+     */
+    private void guardarHistorialVersionInicial(RutinaIA rutina) {
+        try {
+            HistorialRutinaVersion historial = new HistorialRutinaVersion();
+            historial.setRutinaIa(rutina);
+            historial.setVersion(1);
+            historial.setDatosJson(rutina.getRutinaGenerada());
+            historial.setMotivo("Generación inicial");
+            historial.setFechaModificacion(rutina.getFechaGeneracion());
+            historialRutinaVersionRepository.save(historial);
+
+            log.info("Historial inicial guardado para rutina ID: {}", rutina.getIdRutinaIa());
+        } catch (Exception e) {
+            log.error("Error al guardar historial inicial: {}", e.getMessage());
+        }
+    }
+
+    /**
      * Guarda la rutina generada por IA en la base de datos
      * 
      * @param socio       Socio al que se le asigna la rutina
@@ -338,6 +361,8 @@ public class RutinaService {
             }
             log.info("{} detalles guardados correctamente", detallesGuardados);
         }
+
+        guardarHistorialVersionInicial(rutina);
 
         log.info("Rutina guardada con {} detalles totales", rutina.getDetalles().size());
         return rutina;
@@ -516,18 +541,56 @@ public class RutinaService {
 
         detalleRutinaRepository.save(detalle);
 
-        rutina.setVersion(rutina.getVersion() + 1);
+        int nuevaVersion = rutina.getVersion() + 1;
+        rutina.setVersion(nuevaVersion);
         rutinaRepository.save(rutina);
 
-        log.info("Rutina ID: {} ajustada correctamente por: {}", idRutina, nombreModificador);
+        guardarHistorialVersion(rutina, nombreModificador, request.getMotivo());
+
+        log.info("Rutina ID: {} ajustada correctamente por: {}, nueva versión: {}",
+                idRutina, nombreModificador, nuevaVersion);
 
         return Map.of(
                 "success", true,
                 "message", "Rutina ajustada correctamente",
                 "idRutina", idRutina,
                 "idDetalle", request.getIdDetalle(),
-                "nuevaVersion", rutina.getVersion(),
-                "modificadoPor", nombreModificador);
+                "nuevaVersion", nuevaVersion,
+                "modificadoPor", nombreModificador,
+                "motivo", request.getMotivo() != null ? request.getMotivo() : "Ajuste manual");
+    }
+
+    /**
+     * Guarda un registro en el historial de versiones de la rutina
+     * 
+     * @param rutina        Rutina que se está modificando
+     * @param modificadoPor Nombre del usuario que realizó la modificación
+     * @param motivo        Motivo de la modificación
+     */
+    private void guardarHistorialVersion(RutinaIA rutina, String modificadoPor, String motivo) {
+        try {
+            HistorialRutinaVersion historial = new HistorialRutinaVersion();
+            historial.setRutinaIa(rutina);
+            historial.setVersion(rutina.getVersion());
+            historial.setDatosJson(rutina.getRutinaGenerada());
+            historial.setMotivo(motivo != null ? motivo : "Ajuste manual - Versión " + rutina.getVersion());
+
+            if (modificadoPor != null && !modificadoPor.isEmpty()) {
+                String email = modificadoPor.contains("(")
+                        ? modificadoPor.substring(modificadoPor.indexOf("(") + 1, modificadoPor.indexOf(")"))
+                        : modificadoPor;
+
+                usuarioRepository.findByEmail(email).ifPresent(historial::setModificadoPor);
+            }
+
+            historial.setFechaModificacion(LocalDateTime.now());
+            historialRutinaVersionRepository.save(historial);
+
+            log.info("Historial guardado para rutina ID: {}, versión: {}",
+                    rutina.getIdRutinaIa(), rutina.getVersion());
+        } catch (Exception e) {
+            log.error("Error al guardar historial de versión: {}", e.getMessage());
+        }
     }
 
     /**
