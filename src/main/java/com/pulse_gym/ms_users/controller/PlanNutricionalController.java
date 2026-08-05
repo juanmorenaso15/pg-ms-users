@@ -18,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.pulse_gym.lb_common.dto.PlanNutricionalAjusteRequestDTO;
 import com.pulse_gym.lb_common.dto.PlanNutricionalGeneracionRequestDTO;
 import com.pulse_gym.lb_common.dto.PlanNutricionalGeneracionResponseDTO;
+import com.pulse_gym.lb_common.dto.PlanNutricionalHistorialResponseDTO;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.service.PlanNutricionalService;
 
@@ -247,6 +248,37 @@ public class PlanNutricionalController {
             e.printStackTrace();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al ajustar el plan nutricional: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Obtiene el historial de modificaciones de un plan nutricional específico
+     * 
+     * @param idPlan    ID del plan nutricional a consultar
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Lista de DTOs con el historial de modificaciones
+     */
+    @GetMapping("/{idPlan}/historial")
+    public ResponseEntity<List<PlanNutricionalHistorialResponseDTO>> obtenerHistorialPlan(
+            @PathVariable Long idPlan,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
+        try {
+            List<PlanNutricionalHistorialResponseDTO> historial = planNutricionalService.obtenerHistorialPlan(
+                    idPlan, userRol, userIdAutenticado, userEmail);
+            return ResponseEntity.ok(historial);
+
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener historial", e);
         }
     }
 }
