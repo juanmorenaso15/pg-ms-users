@@ -361,6 +361,27 @@ public class MembresiaService {
     }
 
     /**
+     * Obtiene todas las membresías activas con sus socios activos asignados
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista de DTOs con información de membresías y sus socios activos
+     */
+    @Transactional(readOnly = true)
+    public List<MembresiaConSociosDTO> consultarTodasMembresiasConSociosActivos(String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        List<Membresia> membresias = membresiaRepository.findAllWithSociosActivos();
+
+        if (membresias.isEmpty()) {
+            throw new RuntimeException("No hay membresías activas con socios activos disponibles");
+        }
+
+        return membresias.stream()
+                .map(this::convertirAMembresiaConSociosDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Convierte una entidad Membresia a un DTO de respuesta que incluye los socios
      * asignados
      * 
@@ -389,7 +410,6 @@ public class MembresiaService {
                 .totalSociosAsignados(sociosDTO.size())
                 .build();
     }
-
 
     /**
      * Convierte una entidad SocioMembresia a un DTO de respuesta que incluye la

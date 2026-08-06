@@ -65,9 +65,9 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Long> {
             "WHERE m.idMembresia = :idMembresia AND m.activo = true")
     Optional<Membresia> findByIdWithSociosAsignados(@Param("idMembresia") Long idMembresia);
 
-
     /**
      * Obtiene una membresía por ID con SOLO socios ACTIVOS
+     * 
      * @param idMembresia El ID de la membresía
      * @return La membresía con sus socios activos, si existe
      */
@@ -81,6 +81,7 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Long> {
 
     /**
      * Obtiene una membresía por ID con socios ACTIVOS y SUSPENDIDOS
+     * 
      * @param idMembresia El ID de la membresía
      * @return La membresía con sus socios activos y suspendidos, si existe
      */
@@ -91,7 +92,6 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Long> {
             "AND m.activo = true " +
             "AND sm.estado IN ('ACTIVA', 'SUSPENDIDA')")
     Optional<Membresia> findByIdWithSociosActivosYSuspendidas(@Param("idMembresia") Long idMembresia);
-
 
     /**
      * Obtiene todas las membresías activas con sus socios asignados.
@@ -106,7 +106,8 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Long> {
     List<Membresia> findAllWithSociosAsignados();
 
     /**
-     * Cuenta la cantidad de socios activos (ACTIVA o SUSPENDIDA) asociados a una membresía.
+     * Cuenta la cantidad de socios activos (ACTIVA o SUSPENDIDA) asociados a una
+     * membresía.
      * 
      * @param idMembresia El ID de la membresía.
      * @return La cantidad de socios activos asociados a la membresía.
@@ -115,4 +116,12 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Long> {
             "WHERE sm.membresia.idMembresia = :idMembresia " +
             "AND sm.estado IN ('ACTIVA', 'SUSPENDIDA')")
     Long countSociosActivosByMembresia(@Param("idMembresia") Long idMembresia);
+
+    @Query("SELECT DISTINCT m FROM Membresia m " +
+            "LEFT JOIN FETCH m.socioMembresias sm " +
+            "LEFT JOIN FETCH sm.socio s " +
+            "WHERE m.activo = true " +
+            "AND sm.estado = 'ACTIVA' " +
+            "ORDER BY m.idMembresia")
+    List<Membresia> findAllWithSociosActivos();
 }
