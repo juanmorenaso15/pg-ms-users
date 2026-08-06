@@ -1,6 +1,7 @@
 package com.pulse_gym.ms_users.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -8,11 +9,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pulse_gym.lb_common.dto.CalculoMembresiaFlexibleDTO;
+import com.pulse_gym.lb_common.dto.MembresiaConSociosDTO;
 import com.pulse_gym.lb_common.dto.MembresiaFlexibleCalculadaDTO;
 import com.pulse_gym.lb_common.dto.MembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.MembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
+import com.pulse_gym.lb_common.dto.SocioAsignadoDTO;
 import com.pulse_gym.lb_common.entity.user.Membresia;
+import com.pulse_gym.lb_common.entity.user.SocioMembresia;
 import com.pulse_gym.lb_common.enums.EnumTipoDuracion;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_users.repository.MembresiaRepository;
@@ -262,33 +266,41 @@ public class MembresiaService {
     }
 
     /**
-     * Calcula el precio total de una membresía flexible basada en la cantidad de días y la categoría de IA
-     * @param calculoDTO Los datos necesarios para realizar el cálculo de la membresía flexible, incluyendo el ID de la membresía, la cantidad de días y si incluye o no IA
-     * @param userRol El rol del usuario que realiza la acción (obtenido del header "X-User-Rol")
-     * @return Un DTO con la información de la membresía flexible calculada, incluyendo el precio total basado en los días y la categoría de
+     * Calcula el precio total de una membresía flexible basada en la cantidad de
+     * días y la categoría de IA
+     * 
+     * @param calculoDTO Los datos necesarios para realizar el cálculo de la
+     *                   membresía flexible, incluyendo el ID de la membresía, la
+     *                   cantidad de días y si incluye o no IA
+     * @param userRol    El rol del usuario que realiza la acción (obtenido del
+     *                   header "X-User-Rol")
+     * @return Un DTO con la información de la membresía flexible calculada,
+     *         incluyendo el precio total basado en los días y la categoría de
      */
     @Transactional(readOnly = true)
-    public MembresiaFlexibleCalculadaDTO calcularMembresiaFlexible(CalculoMembresiaFlexibleDTO calculoDTO, String userRol) {
+    public MembresiaFlexibleCalculadaDTO calcularMembresiaFlexible(CalculoMembresiaFlexibleDTO calculoDTO,
+            String userRol) {
         ValidacionDeRoles.validarCualquierRol(userRol);
-        
+
         Membresia membresia = membresiaRepository.findById(calculoDTO.getIdMembresia())
-            .orElseThrow(() -> new RuntimeException("Membresía no encontrada con ID: " + calculoDTO.getIdMembresia()));
-        
+                .orElseThrow(
+                        () -> new RuntimeException("Membresía no encontrada con ID: " + calculoDTO.getIdMembresia()));
+
         if (!membresia.getEsFlexible()) {
             throw new RuntimeException("Esta membresía no es flexible. No se puede calcular por días");
         }
-        
+
         if (membresia.getPrecioPorDia() == null) {
             throw new RuntimeException("La membresía flexible no tiene precio por día configurado");
         }
-        
+
         if (!membresia.getIncluyeIA().equals(calculoDTO.getIncluyeIA())) {
             throw new RuntimeException("La categoría de IA no coincide con la membresía seleccionada");
         }
-        
+
         BigDecimal precioTotalCalculado = membresia.getPrecioPorDia()
-            .multiply(BigDecimal.valueOf(calculoDTO.getCantidadDias()));
-        
+                .multiply(BigDecimal.valueOf(calculoDTO.getCantidadDias()));
+
         MembresiaFlexibleCalculadaDTO resultado = new MembresiaFlexibleCalculadaDTO();
         resultado.setIdMembresia(membresia.getIdMembresia());
         resultado.setNombre(membresia.getNombre());
@@ -296,8 +308,117 @@ public class MembresiaService {
         resultado.setPrecioPorDia(membresia.getPrecioPorDia());
         resultado.setPrecioTotalCalculado(precioTotalCalculado);
         resultado.setIncluyeIA(membresia.getIncluyeIA());
-        
+
         return resultado;
+    }
+
+    @Transactional(readOnly = true)
+    public MembresiaConSociosDTO consultarMembresiaConSocios(Long idMembresia, String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        Membresia membresia = membresiaRepository.findByIdWithSociosAsignados(idMembresia)
+                .orElseThrow(() -> new RuntimeException("Membresía no encontrada con ID: " + idMembresia));
+
+        return convertirAMembresiaConSociosDTO(membresia);
+    }
+
+    /**
+     * Consulta una membresía por ID con solo socios activos
+     * 
+     * @param idMembresia ID de la membresía a consultar
+     * @param userRol     Rol del usuario autenticado
+     * @return DTO con la información de la membresía y sus socios activos
+     */
+    @Transactional(readOnly = true)
+    public MembresiaConSociosDTO consultarMembresiaConSociosActivos(Long idMembresia, String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        Membresia membresia = membresiaRepository.findByIdWithSociosActivos(idMembresia)
+                .orElseThrow(() -> new RuntimeException("Membresía no encontrada con ID: " + idMembresia));
+
+        return convertirAMembresiaConSociosDTO(membresia);
+    }
+
+    /**
+     * Obtiene todas las membresías activas con sus socios asignados
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista de DTOs con información de membresías y sus socios
+     */
+    @Transactional(readOnly = true)
+    public List<MembresiaConSociosDTO> consultarTodasMembresiasConSocios(String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        List<Membresia> membresias = membresiaRepository.findAllWithSociosAsignados();
+
+        if (membresias.isEmpty()) {
+            throw new RuntimeException("No hay membresías activas disponibles");
+        }
+
+        return membresias.stream()
+                .map(this::convertirAMembresiaConSociosDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Convierte una entidad Membresia a un DTO de respuesta que incluye los socios
+     * asignados
+     * 
+     * @param membresia La entidad de membresía a convertir
+     * @return Un DTO con la información de la membresía y sus socios asignados
+     */
+    private MembresiaConSociosDTO convertirAMembresiaConSociosDTO(Membresia membresia) {
+        List<SocioAsignadoDTO> sociosDTO = membresia.getSocioMembresias().stream()
+                .map(this::convertirSocioMembresiaASocioAsignadoDTO)
+                .collect(Collectors.toList());
+
+        return MembresiaConSociosDTO.builder()
+                .idMembresia(membresia.getIdMembresia())
+                .nombre(membresia.getNombre())
+                .precioTotal(membresia.getPrecioTotal())
+                .cantidad(membresia.getCantidad())
+                .tipoDuracion(membresia.getTipoDuracion().name())
+                .duracionDescripcion(membresia.getDuracionDescripcion())
+                .incluyeIA(membresia.getIncluyeIA())
+                .esFlexible(membresia.getEsFlexible())
+                .precioPorDia(membresia.getPrecioPorDia())
+                .beneficios(membresia.getBeneficios())
+                .restricciones(membresia.getRestricciones())
+                .activo(membresia.getActivo())
+                .sociosAsignados(sociosDTO)
+                .totalSociosAsignados(sociosDTO.size())
+                .build();
+    }
+
+
+    /**
+     * Convierte una entidad SocioMembresia a un DTO de respuesta que incluye la
+     * información del socio asignado
+     * 
+     * @param socioMembresia La entidad de socio-membresía a convertir
+     * @return Un DTO con la información del socio asignado y su membresía
+     */
+    private SocioAsignadoDTO convertirSocioMembresiaASocioAsignadoDTO(SocioMembresia socioMembresia) {
+        Long diasRestantes = socioMembresia.getDiasRestantes();
+
+        String nombreCompleto = socioMembresia.getSocio().getNombre();
+        if (socioMembresia.getSocio().getApellido() != null && !socioMembresia.getSocio().getApellido().isEmpty()) {
+            nombreCompleto += " " + socioMembresia.getSocio().getApellido();
+        }
+
+        return SocioAsignadoDTO.builder()
+                .idSocio(socioMembresia.getSocio().getIdUsuario())
+                .nombreCompleto(nombreCompleto)
+                .email(socioMembresia.getSocio().getEmail())
+                .telefono(socioMembresia.getSocio().getTelefono())
+                .idSocioMembresia(socioMembresia.getIdSocioMembresia())
+                .fechaInicio(socioMembresia.getFechaInicio())
+                .fechaVencimiento(socioMembresia.getFechaVencimiento())
+                .estado(socioMembresia.getEstado().name())
+                .diasRestantes(diasRestantes)
+                .observaciones(socioMembresia.getObservaciones())
+                .fechaCreacion(socioMembresia.getFechaCreacion())
+                .build();
     }
 
 }
