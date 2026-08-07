@@ -82,10 +82,11 @@ public class SocioMembresiaController {
     public ResponseEntity<List<SocioMembresiaResponseDTO>> consultarMembresiasSocio(
             @PathVariable Long idSocio,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
-            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado) {
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
         try {
             List<SocioMembresiaResponseDTO> membresias = socioMembresiaService.consultarMembresiasSocio(
-                    idSocio, userRol, userIdAutenticado);
+                    idSocio, userRol, userEmail);
             return ResponseEntity.ok(membresias);
         } catch (SecurityAuthorizationException e) {
             throw e;
@@ -93,7 +94,8 @@ public class SocioMembresiaController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al consultar membresías", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar membresías", e);
         }
     }
 
@@ -188,29 +190,42 @@ public class SocioMembresiaController {
      * @return DTO con los datos de la membresía activa del socio, o null si no
      *         tiene ninguna activa, con código HTTP 200
      */
-    @GetMapping("/socio/{idSocio}/activa")
-    public ResponseEntity<SocioMembresiaResponseDTO> obtenerMembresiaActiva(
-            @PathVariable Long idSocio,
-            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
-            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado) {
-        try {
-            List<SocioMembresiaResponseDTO> membresias = socioMembresiaService.consultarMembresiasSocio(
-                    idSocio, userRol, userIdAutenticado);
-            SocioMembresiaResponseDTO activa = membresias.stream()
-                    .filter(SocioMembresiaResponseDTO::getEstaActiva)
-                    .findFirst()
-                    .orElse(null);
-            return ResponseEntity.ok(activa);
-        } catch (SecurityAuthorizationException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al obtener membresía activa", e);
+@GetMapping("/socio/{idSocio}/activa")
+public ResponseEntity<SocioMembresiaResponseDTO> obtenerMembresiaActiva(
+        @PathVariable Long idSocio,
+        @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+        @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+    
+    try {
+        // Consultar todas las membresías del socio usando email
+        List<SocioMembresiaResponseDTO> membresias = socioMembresiaService.consultarMembresiasSocio(
+                idSocio, userRol, userEmail);
+        
+        // Filtrar la membresía activa
+        SocioMembresiaResponseDTO activa = membresias.stream()
+                .filter(SocioMembresiaResponseDTO::getEstaActiva)
+                .findFirst()
+                .orElse(null);
+        
+        return ResponseEntity.ok(activa);
+        
+    } catch (SecurityAuthorizationException e) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        
+    } catch (RuntimeException e) {
+        if (e.getMessage().contains("no encontrado")) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        
+    } catch (Exception e) {
+        throw new ResponseStatusException(
+            HttpStatus.INTERNAL_SERVER_ERROR, 
+            "Error al obtener membresía activa", 
+            e
+        );
     }
-
+}
     /**
      * Consultar estado de membresía desde app
      * 

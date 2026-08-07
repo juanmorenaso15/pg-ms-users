@@ -102,7 +102,7 @@ public class SocioMembresiaService {
      */
     @Transactional
     public MessegeGlobalDTO asignarMembresia(AsignarMembresiaRequestDTO requestDTO, String userRol) {
-        ValidacionDeRoles.validarEntrenadorORecepcionista(userRol);
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         UsuarioPerfil socio = usuarioRepository.findById(requestDTO.getIdSocio())
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + requestDTO.getIdSocio()));
@@ -150,14 +150,20 @@ public class SocioMembresiaService {
      *         fechas, estado, renovación automática, etc.)
      */
     @Transactional(readOnly = true)
-    public List<SocioMembresiaResponseDTO> consultarMembresiasSocio(Long idSocio, String userRol,
-            Long userIdAutenticado) {
+    public List<SocioMembresiaResponseDTO> consultarMembresiasSocio(
+            Long idSocio,
+            String userRol,
+            String userEmail) {
 
         if (userRol.equals(EnumRol.socio.name())) {
-            if (!userIdAutenticado.equals(idSocio)) {
+            UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Socio autenticado no encontrado"));
+
+            if (!socioAutenticado.getIdUsuario().equals(idSocio)) {
                 throw new SecurityAuthorizationException("Acceso denegado. Solo puede consultar su propia membresía");
             }
-        } else if (!userRol.equals(EnumRol.administrador.name()) && !userRol.equals(EnumRol.recepcionista.name())
+        } else if (!userRol.equals(EnumRol.administrador.name())
+                && !userRol.equals(EnumRol.recepcionista.name())
                 && !userRol.equals(EnumRol.entrenador.name())) {
             throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado: " + userRol);
         }
@@ -245,7 +251,7 @@ public class SocioMembresiaService {
      */
     @Transactional
     public MessegeGlobalDTO cancelarMembresia(Long idSocioMembresia, String motivo, String userRol) {
-        ValidacionDeRoles.validarEntrenadorORecepcionista(userRol);
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         SocioMembresia socioMembresia = socioMembresiaRepository.findById(idSocioMembresia)
                 .orElseThrow(() -> new RuntimeException(
@@ -275,7 +281,7 @@ public class SocioMembresiaService {
      */
     @Transactional
     public MessegeGlobalDTO suspenderMembresia(SuspenderMembresiaRequestDTO requestDTO, String userRol) {
-        ValidacionDeRoles.validarEntrenadorORecepcionista(userRol);
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         SocioMembresia socioMembresia = socioMembresiaRepository.findById(requestDTO.getIdSocioMembresia())
                 .orElseThrow(() -> new RuntimeException(
@@ -303,20 +309,42 @@ public class SocioMembresiaService {
      * 
      * @return void (no retorna valor)
      */
-    @Scheduled(cron = "0 0 0 * * ?")
+    @Scheduled(cron = "0 0 * * * ?") // Cada hora en punto
     @Transactional
     public void actualizarMembresiasVencidas() {
         log.info("Ejecutando tarea programada: actualizar membresías vencidas");
 
-        List<SocioMembresia> vencidas = socioMembresiaRepository.findVencidasActivas();
+        try {
+            List<SocioMembresia> vencidas = socioMembresiaRepository
+                    .findByEstadoAndFechaVencimientoBefore(
+                            EnumEstadoSocioMembresia.ACTIVA,
+                            LocalDate.now());
 
-        for (SocioMembresia sm : vencidas) {
-            sm.setEstado(EnumEstadoSocioMembresia.VENCIDA);
-            sm.setObservaciones("Vencimiento automático el " + LocalDate.now());
+            if (vencidas.isEmpty()) {
+                log.info("No hay membresías vencidas para actualizar");
+                return;
+            }
+
+            // Actualizar cada membresía
+            for (SocioMembresia sm : vencidas) {
+                String observacionesAnteriores = sm.getObservaciones();
+                String nuevaObservacion = String.format(
+                        "Vencimiento automático el %s (días restantes: 0)%s",
+                        LocalDate.now(),
+                        observacionesAnteriores != null ? " - " + observacionesAnteriores : "");
+
+                sm.setEstado(EnumEstadoSocioMembresia.VENCIDA);
+                sm.setObservaciones(nuevaObservacion);
+                log.debug("Membresía ID: {} marcada como VENCIDA", sm.getIdSocioMembresia());
+            }
+
+            socioMembresiaRepository.saveAll(vencidas);
+            log.info("Membresías vencidas actualizadas exitosamente: {}", vencidas.size());
+
+        } catch (Exception e) {
+            log.error("Error al actualizar membresías vencidas: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al actualizar membresías vencidas", e);
         }
-
-        socioMembresiaRepository.saveAll(vencidas);
-        log.info("Membresías vencidas actualizadas: {}", vencidas.size());
     }
 
     /**
