@@ -59,4 +59,22 @@ public interface SocioMembresiaRepository extends JpaRepository<SocioMembresia, 
             "AND (:fechaFin IS NULL OR sm.fechaVencimiento <= :fechaFin)")
     List<UsuarioPerfil> findSociosEnMora(@Param("fechaInicio") LocalDate fechaInicio,
             @Param("fechaFin") LocalDate fechaFin);
+    /**
+     * Busca membresías por estado y fecha de vencimiento
+     * 
+     * @param estado estado de la membresía
+     * @param fecha  fecha de vencimiento antes de la cual se buscan las membresías
+     * @return una lista de membresías que cumplen con los criterios
+     */
+    List<SocioMembresia> findByEstadoAndFechaVencimientoBefore(
+            EnumEstadoSocioMembresia estado,
+            LocalDate fecha);
+
+    /***
+     *  Busca membresías vencidas, incluyendo las que están suspendidas
+     * @return una lista de membresías vencidas, incluyendo las suspendidas
+     */
+    @Query("SELECT sm FROM SocioMembresia sm WHERE sm.estado IN ('ACTIVA', 'SUSPENDIDA') AND sm.fechaVencimiento < CURRENT_DATE")
+    List<SocioMembresia> findVencidasIncluyendoSuspendidas();
+
 }

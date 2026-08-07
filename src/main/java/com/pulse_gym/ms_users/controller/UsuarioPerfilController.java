@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -40,21 +39,23 @@ public class UsuarioPerfilController {
      */
     private final UsuarioPerfilService usuarioService;
 
-    @PostMapping("/completar-perfil/{email}")
+    @PostMapping("/completar-perfil")
     public ResponseEntity<MessegeGlobalDTO> completarPerfil(
-            @PathVariable String email,
-            @Valid @RequestBody CompletarPerfilRequestDTO requestDTO,
+            @Valid @RequestBody CompletarPerfilRequestDTO request,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
         try {
-            MessegeGlobalDTO response = usuarioService.completarPerfil(email, requestDTO, userRol, userEmail);
+            MessegeGlobalDTO response = usuarioService.completarPerfil(userEmail, request, userRol, userEmail);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (SecurityAuthorizationException e) {
             throw e;
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al completar el perfil", e);
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al completar el perfil", e);
         }
     }
 

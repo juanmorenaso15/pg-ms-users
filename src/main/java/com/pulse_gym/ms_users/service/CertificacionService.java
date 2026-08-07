@@ -44,7 +44,7 @@ public class CertificacionService {
      */
     @Transactional
     public MessegeGlobalDTO registrarCertificacion(CertificacionRequestDTO requestDTO, String userRol) {
-        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         UsuarioPerfil entrenador = usuarioRepository.findById(requestDTO.getIdEntrenador())
                 .orElseThrow(
@@ -93,8 +93,6 @@ public class CertificacionService {
             if (!userIdAutenticado.equals(idEntrenador)) {
                 throw new SecurityAuthorizationException("Acceso denegado. Solo puede ver sus propias certificaciones");
             }
-        } else if (!userRol.equals(EnumRol.administrador.name()) && !userRol.equals(EnumRol.recepcionista.name())) {
-            throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado");
         }
 
         UsuarioPerfil entrenador = usuarioRepository.findById(idEntrenador)
@@ -140,7 +138,7 @@ public class CertificacionService {
     @Transactional
     public MessegeGlobalDTO actualizarCertificacion(Long idCertificacion, CertificacionUpdateDTO requestDTO,
             String userRol) {
-        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         Certificacion certificacion = certificacionRepository.findById(idCertificacion)
                 .orElseThrow(() -> new RuntimeException("Certificación no encontrada con ID: " + idCertificacion));
@@ -167,7 +165,7 @@ public class CertificacionService {
      */
     @Transactional
     public MessegeGlobalDTO eliminarCertificacion(Long idCertificacion, String userRol) {
-        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         Certificacion certificacion = certificacionRepository.findById(idCertificacion)
                 .orElseThrow(() -> new RuntimeException("Certificación no encontrada con ID: " + idCertificacion));

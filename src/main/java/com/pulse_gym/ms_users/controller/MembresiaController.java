@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.pulse_gym.lb_common.dto.CalculoMembresiaFlexibleDTO;
+import com.pulse_gym.lb_common.dto.MembresiaConSociosDTO;
 import com.pulse_gym.lb_common.dto.MembresiaFlexibleCalculadaDTO;
 import com.pulse_gym.lb_common.dto.MembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.MembresiaResponseDTO;
@@ -161,10 +162,16 @@ public class MembresiaController {
     }
 
     /**
-     * Endpoint para calcular el precio total de una membresía flexible basada en la cantidad de días y la categoría de IA
-     * @param calculoDTO Los datos necesarios para realizar el cálculo de la membresía flexible, incluyendo el ID de la membresía, la cantidad de días y si incluye o no IA
-     * @param userRol El rol del usuario que realiza la acción (obtenido del header "X-User-Rol")
-     * @return Un DTO con la información de la membresía flexible calculada, incluyendo el precio total basado en los días y la categoría de IA
+     * Endpoint para calcular el precio total de una membresía flexible basada en la
+     * cantidad de días y la categoría de IA
+     * 
+     * @param calculoDTO Los datos necesarios para realizar el cálculo de la
+     *                   membresía flexible, incluyendo el ID de la membresía, la
+     *                   cantidad de días y si incluye o no IA
+     * @param userRol    El rol del usuario que realiza la acción (obtenido del
+     *                   header "X-User-Rol")
+     * @return Un DTO con la información de la membresía flexible calculada,
+     *         incluyendo el precio total basado en los días y la categoría de IA
      */
     @PostMapping("/calcular-flexible")
     public ResponseEntity<MembresiaFlexibleCalculadaDTO> calcularMembresiaFlexible(
@@ -183,4 +190,120 @@ public class MembresiaController {
                     e);
         }
     }
+
+    /**
+     * Consulta una membresía específica con sus socios asignados
+     * 
+     * @param idMembresia ID de la membresía a consultar
+     * @param userRol     Rol del usuario autenticado (X-User-Rol)
+     * @return DTO con la membresía y sus socios asignados
+     */
+    @GetMapping("/{idMembresia}/socios")
+    public ResponseEntity<MembresiaConSociosDTO> consultarMembresiaConSocios(
+            @PathVariable Long idMembresia,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        try {
+            MembresiaConSociosDTO resultado = membresiaService.consultarMembresiaConSocios(
+                    idMembresia, userRol);
+            return ResponseEntity.ok(resultado);
+
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no encontrada")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar la membresía con sus socios",
+                    e);
+        }
+    }
+
+    /**
+     * Consulta una membresía específica con sus socios activos
+     * 
+     * @param idMembresia ID de la membresía a consultar
+     * @param userRol     Rol del usuario autenticado (X-User-Rol)
+     * @return DTO con la membresía y sus socios activos
+     */
+    @GetMapping("/{idMembresia}/socios-activos")
+    public ResponseEntity<MembresiaConSociosDTO> consultarMembresiaConSociosActivos(
+            @PathVariable Long idMembresia,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        try {
+            MembresiaConSociosDTO resultado = membresiaService.consultarMembresiaConSociosActivos(
+                    idMembresia, userRol);
+            return ResponseEntity.ok(resultado);
+
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no encontrada")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar la membresía con sus socios activos",
+                    e);
+        }
+    }
+
+    /**
+     * Lista todas las membresías con sus socios asignados
+     * 
+     * @param userRol Rol del usuario autenticado (X-User-Rol)
+     * @return Lista de DTOs con membresías y sus socios
+     */
+    @GetMapping("/todos-con-socios")
+    public ResponseEntity<List<MembresiaConSociosDTO>> consultarTodasMembresiasConSocios(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        try {
+            List<MembresiaConSociosDTO> resultados = membresiaService.consultarTodasMembresiasConSocios(userRol);
+            return ResponseEntity.ok(resultados);
+
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar las membresías con sus socios",
+                    e);
+        }
+    }
+
+    /**
+     * Lista todas las membresías con sus socios activos
+     * @param userRol Rol del usuario autenticado (X-User-Rol)
+     * @return Lista de DTOs con membresías y sus socios activos
+     */
+    @GetMapping("/todos-con-socios-activos")
+    public ResponseEntity<List<MembresiaConSociosDTO>> consultarTodasMembresiasConSociosActivos(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        try {
+            List<MembresiaConSociosDTO> resultados = membresiaService.consultarTodasMembresiasConSociosActivos(userRol);
+            return ResponseEntity.ok(resultados);
+
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar las membresías con sus socios activos",
+                    e);
+        }
+    }
+
 }
