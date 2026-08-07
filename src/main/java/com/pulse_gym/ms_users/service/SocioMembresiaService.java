@@ -1,6 +1,7 @@
 package com.pulse_gym.ms_users.service;
 
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -13,6 +14,7 @@ import com.pulse_gym.lb_common.dto.EstadoMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RenovarMembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.SocioMembresiaResponseDTO;
+import com.pulse_gym.lb_common.dto.SocioMoraDTO;
 import com.pulse_gym.lb_common.dto.SuspenderMembresiaRequestDTO;
 import com.pulse_gym.lb_common.entity.user.Membresia;
 import com.pulse_gym.lb_common.entity.user.SocioMembresia;
@@ -471,6 +473,29 @@ public class SocioMembresiaService {
         }
 
         return new MessegeGlobalDTO("No se requirió actualización del estado de la membresía");
+    }
+
+    public List<SocioMoraDTO> obtenerSociosEnMora(LocalDate fechaInicio, LocalDate fechaFin) {
+        List<SocioMembresia> morosos = socioMembresiaRepository.findMorosos(fechaInicio, fechaFin);
+        if (morosos.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return morosos.stream().map(this::convertirAMoraDTO).collect(Collectors.toList());
+    }
+
+    private SocioMoraDTO convertirAMoraDTO(SocioMembresia sm) {
+        UsuarioPerfil socio = sm.getSocio();
+        SocioMoraDTO dto = new SocioMoraDTO();
+        dto.setIdSocio(socio.getIdUsuario());
+        dto.setNombreCompleto(socio.getNombre() + " " + socio.getApellido());
+        dto.setIdentificacion(socio.getDocumentoIdentidad()); 
+        dto.setTelefono(socio.getTelefono());
+        dto.setEmail(socio.getEmail());
+        dto.setTipoMembresia(sm.getMembresia().getNombre());
+        dto.setEstadoMembresia(sm.getEstado().name());
+        dto.setFechaVencimiento(sm.getFechaVencimiento().toString());
+        dto.setDiasVencido(LocalDate.now().toEpochDay() - sm.getFechaVencimiento().toEpochDay());
+        return dto;
     }
 
 }
