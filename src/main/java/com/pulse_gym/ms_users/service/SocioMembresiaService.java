@@ -476,26 +476,31 @@ public class SocioMembresiaService {
     }
 
     public List<SocioMoraDTO> obtenerSociosEnMora(LocalDate fechaInicio, LocalDate fechaFin) {
-        List<SocioMembresia> morosos = socioMembresiaRepository.findMorosos(fechaInicio, fechaFin);
-        if (morosos.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return morosos.stream().map(this::convertirAMoraDTO).collect(Collectors.toList());
+    if (fechaInicio == null) {
+        fechaInicio = LocalDate.of(1900, 1, 1);
     }
+    if (fechaFin == null) {
+        fechaFin = LocalDate.now();
+    }
+    
+    List<SocioMembresia> morosos = socioMembresiaRepository.findMorosos(fechaInicio, fechaFin);
+    if (morosos.isEmpty()) {
+        return Collections.emptyList();
+    }
+    return morosos.stream().map(this::convertirAMoraDTO).collect(Collectors.toList());
+}
 
     private SocioMoraDTO convertirAMoraDTO(SocioMembresia sm) {
-        UsuarioPerfil socio = sm.getSocio();
-        SocioMoraDTO dto = new SocioMoraDTO();
-        dto.setIdSocio(socio.getIdUsuario());
-        dto.setNombreCompleto(socio.getNombre() + " " + socio.getApellido());
-        dto.setIdentificacion(socio.getDocumentoIdentidad()); 
-        dto.setTelefono(socio.getTelefono());
-        dto.setEmail(socio.getEmail());
-        dto.setTipoMembresia(sm.getMembresia().getNombre());
-        dto.setEstadoMembresia(sm.getEstado().name());
-        dto.setFechaVencimiento(sm.getFechaVencimiento().toString());
-        dto.setDiasVencido(LocalDate.now().toEpochDay() - sm.getFechaVencimiento().toEpochDay());
-        return dto;
-    }
-
+    UsuarioPerfil socio = sm.getSocio();
+    SocioMoraDTO dto = new SocioMoraDTO();
+    dto.setIdSocio(socio.getIdUsuario());
+    dto.setNombreCompleto(socio.getNombre() + " " + socio.getApellido());
+    dto.setIdentificacion(socio.getDocumentoIdentidad()); // ← Cambia aquí
+    dto.setTelefono(socio.getTelefono());
+    dto.setEmail(socio.getEmail());
+    dto.setTipoMembresia(sm.getMembresia().getNombre());
+    dto.setEstadoMembresia(sm.getEstado().name());
+    dto.setFechaVencimiento(sm.getFechaVencimiento().toString());
+    return dto;
+}
 }
