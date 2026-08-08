@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.pulse_gym.lb_common.entity.user.SocioMembresia;
+import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
 import com.pulse_gym.lb_common.enums.EnumEstadoSocioMembresia;
 
 public interface SocioMembresiaRepository extends JpaRepository<SocioMembresia, Long> {
@@ -45,6 +46,19 @@ public interface SocioMembresiaRepository extends JpaRepository<SocioMembresia, 
      */
     boolean existsBySocio_IdUsuarioAndEstado(Long idSocio, EnumEstadoSocioMembresia estado);
 
+    @Query("SELECT sm FROM SocioMembresia sm " +
+            "WHERE sm.estado IN ('VENCIDA', 'SUSPENDIDA') " +
+            "AND sm.fechaVencimiento >= :fechaInicio " +
+            "AND sm.fechaVencimiento <= :fechaFin")
+    List<SocioMembresia> findMorosos(@Param("fechaInicio") LocalDate fechaInicio,
+            @Param("fechaFin") LocalDate fechaFin);
+
+    @Query("SELECT DISTINCT sm.socio FROM SocioMembresia sm " +
+            "WHERE (sm.estado = 'VENCIDA' OR (sm.estado = 'ACTIVA' AND sm.fechaVencimiento < :fechaFin)) " +
+            "AND (:fechaInicio IS NULL OR sm.fechaVencimiento >= :fechaInicio) " +
+            "AND (:fechaFin IS NULL OR sm.fechaVencimiento <= :fechaFin)")
+    List<UsuarioPerfil> findSociosEnMora(@Param("fechaInicio") LocalDate fechaInicio,
+            @Param("fechaFin") LocalDate fechaFin);
     /**
      * Busca membresías por estado y fecha de vencimiento
      * 
