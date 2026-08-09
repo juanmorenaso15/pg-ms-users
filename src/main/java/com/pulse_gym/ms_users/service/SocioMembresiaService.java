@@ -1,5 +1,6 @@
 package com.pulse_gym.ms_users.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
@@ -9,8 +10,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.pulse_gym.lb_common.dto.AsignarMembresiaFlexibleRequestDTO;
 import com.pulse_gym.lb_common.dto.AsignarMembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.EstadoMembresiaResponseDTO;
+import com.pulse_gym.lb_common.dto.MembresiaPorVencerDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RenovarMembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.SocioMembresiaResponseDTO;
@@ -75,11 +78,26 @@ public class SocioMembresiaService {
         dto.setEmailSocio(sm.getSocio().getEmail());
         dto.setIdMembresia(sm.getMembresia().getIdMembresia());
         dto.setNombreMembresia(sm.getMembresia().getNombre());
-        dto.setPrecioTotal(sm.getMembresia().getPrecioTotal());
+
+        dto.setPrecioTotal(calcularPrecioReal(sm));
+
         dto.setCantidad(sm.getMembresia().getCantidad());
         dto.setTipoDuracion(sm.getMembresia().getTipoDuracion().name());
         dto.setDuracionDescripcion(sm.getMembresia().getDuracionDescripcion());
         dto.setIncluyeIA(sm.getMembresia().getIncluyeIA());
+
+        dto.setEsFlexible(sm.getMembresia().getEsFlexible());
+        dto.setPrecioPorDia(sm.getMembresia().getPrecioPorDia());
+
+        if (Boolean.TRUE.equals(sm.getMembresia().getEsFlexible())) {
+            long dias = java.time.temporal.ChronoUnit.DAYS.between(
+                    sm.getFechaInicio(),
+                    sm.getFechaVencimiento());
+            dto.setCantidadDias((int) dias);
+        } else {
+            dto.setCantidadDias(null);
+        }
+
         dto.setFechaInicio(sm.getFechaInicio());
         dto.setFechaVencimiento(sm.getFechaVencimiento());
         dto.setEstado(sm.getEstado().name());
@@ -90,7 +108,30 @@ public class SocioMembresiaService {
         dto.setRestricciones(sm.getMembresia().getRestricciones());
         dto.setFechaCreacion(sm.getFechaCreacion());
         dto.setFechaActualizacion(sm.getFechaActualizacion());
+
         return dto;
+    }
+
+    /**
+     * Calcula el precio real de la membresía considerando si es flexible o no.
+     * 
+     * @param sm La entidad SocioMembresia a evaluar
+     * @return El precio total de la membresía, calculado según su tipo (fija o
+     *         flexible).
+     */
+    private BigDecimal calcularPrecioReal(SocioMembresia sm) {
+        Membresia membresia = sm.getMembresia();
+
+        if (Boolean.TRUE.equals(membresia.getEsFlexible())) {
+            long dias = java.time.temporal.ChronoUnit.DAYS.between(
+                    sm.getFechaInicio(),
+                    sm.getFechaVencimiento());
+            if (membresia.getPrecioPorDia() != null) {
+                return membresia.getPrecioPorDia().multiply(BigDecimal.valueOf(Math.max(1, dias)));
+            }
+        }
+
+        return membresia.getPrecioTotal();
     }
 
     /**
@@ -504,31 +545,216 @@ public class SocioMembresiaService {
     }
 
     public List<SocioMoraDTO> obtenerSociosEnMora(LocalDate fechaInicio, LocalDate fechaFin) {
-    if (fechaInicio == null) {
-        fechaInicio = LocalDate.of(1900, 1, 1);
+        if (fechaInicio == null) {
+            fechaInicio = LocalDate.of(1900, 1, 1);
+        }
+        if (fechaFin == null) {
+            fechaFin = LocalDate.now();
+        }
+
+        List<SocioMembresia> morosos = socioMembresiaRepository.findMorosos(fechaInicio, fechaFin);
+        if (morosos.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return morosos.stream().map(this::convertirAMoraDTO).collect(Collectors.toList());
     }
-    if (fechaFin == null) {
-        fechaFin = LocalDate.now();
-    }
-    
-    List<SocioMembresia> morosos = socioMembresiaRepository.findMorosos(fechaInicio, fechaFin);
-    if (morosos.isEmpty()) {
-        return Collections.emptyList();
-    }
-    return morosos.stream().map(this::convertirAMoraDTO).collect(Collectors.toList());
-}
 
     private SocioMoraDTO convertirAMoraDTO(SocioMembresia sm) {
-    UsuarioPerfil socio = sm.getSocio();
-    SocioMoraDTO dto = new SocioMoraDTO();
-    dto.setIdSocio(socio.getIdUsuario());
-    dto.setNombreCompleto(socio.getNombre() + " " + socio.getApellido());
-    dto.setIdentificacion(socio.getDocumentoIdentidad()); // ← Cambia aquí
-    dto.setTelefono(socio.getTelefono());
-    dto.setEmail(socio.getEmail());
-    dto.setTipoMembresia(sm.getMembresia().getNombre());
-    dto.setEstadoMembresia(sm.getEstado().name());
-    dto.setFechaVencimiento(sm.getFechaVencimiento().toString());
-    return dto;
-}
+        UsuarioPerfil socio = sm.getSocio();
+        SocioMoraDTO dto = new SocioMoraDTO();
+        dto.setIdSocio(socio.getIdUsuario());
+        dto.setNombreCompleto(socio.getNombre() + " " + socio.getApellido());
+        dto.setIdentificacion(socio.getDocumentoIdentidad());
+        dto.setTelefono(socio.getTelefono());
+        dto.setEmail(socio.getEmail());
+        dto.setTipoMembresia(sm.getMembresia().getNombre());
+        dto.setEstadoMembresia(sm.getEstado().name());
+        dto.setFechaVencimiento(sm.getFechaVencimiento().toString());
+        return dto;
+    }
+
+    /**
+     * Asigna una membresía flexible a un socio (días personalizados)
+     * 
+     * @param requestDTO Datos de la asignación
+     * @param userRol    Rol del usuario autenticado
+     * @return Mensaje de confirmación
+     */
+    @Transactional
+    public MessegeGlobalDTO asignarMembresiaFlexible(AsignarMembresiaFlexibleRequestDTO requestDTO, String userRol) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        UsuarioPerfil socio = usuarioRepository.findById(requestDTO.getIdSocio())
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + requestDTO.getIdSocio()));
+
+        Membresia membresia = membresiaRepository.findById(requestDTO.getIdMembresia())
+                .orElseThrow(
+                        () -> new RuntimeException("Membresía no encontrada con ID: " + requestDTO.getIdMembresia()));
+
+        if (!membresia.getEsFlexible()) {
+            throw new RuntimeException("La membresía seleccionada no es flexible. Use el método de asignación normal.");
+        }
+
+        if (!membresia.getActivo()) {
+            throw new RuntimeException("La membresía no está activa");
+        }
+
+        if (socioMembresiaRepository.existsBySocio_IdUsuarioAndEstado(requestDTO.getIdSocio(),
+                EnumEstadoSocioMembresia.ACTIVA)) {
+            throw new RuntimeException("El socio ya tiene una membresía activa.");
+        }
+
+        if (membresia.getPrecioPorDia() == null || membresia.getPrecioPorDia().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("La membresía flexible no tiene precio por día configurado");
+        }
+
+        LocalDate fechaInicio = LocalDate.now();
+        LocalDate fechaVencimiento = fechaInicio.plusDays(requestDTO.getCantidadDias());
+
+        BigDecimal precioReal = membresia.getPrecioPorDia()
+                .multiply(BigDecimal.valueOf(requestDTO.getCantidadDias()));
+
+        SocioMembresia socioMembresia = new SocioMembresia();
+        socioMembresia.setSocio(socio);
+        socioMembresia.setMembresia(membresia);
+        socioMembresia.setFechaInicio(fechaInicio);
+        socioMembresia.setFechaVencimiento(fechaVencimiento);
+        socioMembresia.setEstado(EnumEstadoSocioMembresia.ACTIVA);
+
+        String observacionCompleta = String.format(
+                "Membresía flexible - %d días - Precio calculado: $%,.0f - %s",
+                requestDTO.getCantidadDias(),
+                precioReal,
+                requestDTO.getObservaciones() != null ? requestDTO.getObservaciones() : "Sin observaciones");
+        socioMembresia.setObservaciones(observacionCompleta);
+
+        socioMembresiaRepository.save(socioMembresia);
+
+        return new MessegeGlobalDTO(String.format(
+                "Membresía flexible '%s' asignada correctamente a %s. " +
+                        "Duración: %d días. " +
+                        "Vence: %s. " +
+                        "Precio total: $%,.0f " +
+                        "($%,.0f por día x %d días)",
+                membresia.getNombre(),
+                socio.getNombre(),
+                requestDTO.getCantidadDias(),
+                fechaVencimiento,
+                precioReal,
+                membresia.getPrecioPorDia(),
+                requestDTO.getCantidadDias()));
+    }
+
+    /**
+     * Obtiene membresías por vencer en los próximos 5 días
+     * 
+     * @return Lista de DTOs con las membresías por vencer
+     */
+    @Transactional(readOnly = true)
+    public List<MembresiaPorVencerDTO> obtenerMembresiasPorVencer() {
+        LocalDate hoy = LocalDate.now();
+        LocalDate fechaLimite = hoy.plusDays(5);
+
+        List<SocioMembresia> membresias = socioMembresiaRepository
+                .findMembresiasPorVencerEnRango(hoy, fechaLimite);
+
+        if (membresias.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return membresias.stream()
+                .map(this::convertirAPorVencerDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Obtiene membresías por vencer en un rango específico de días
+     * 
+     * @param diasMinimo Días mínimos desde hoy (ej: 1)
+     * @param diasMaximo Días máximos desde hoy (ej: 3)
+     * @param userRol    Rol del usuario autenticado
+     * @return Lista de DTOs con las membresías por vencer en el rango
+     * @throws IllegalArgumentException Si los parámetros son inválidos
+     */
+    @Transactional(readOnly = true)
+    public List<MembresiaPorVencerDTO> obtenerMembresiasPorVencerEnRango(
+            int diasMinimo, int diasMaximo, String userRol) {
+
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        if (diasMinimo < 0) {
+            throw new IllegalArgumentException("diasMinimo debe ser mayor o igual a 0");
+        }
+        if (diasMaximo < diasMinimo) {
+            throw new IllegalArgumentException("diasMaximo debe ser mayor o igual a diasMinimo");
+        }
+        if (diasMaximo > 365) {
+            throw new IllegalArgumentException("diasMaximo no puede ser mayor a 365");
+        }
+
+        LocalDate hoy = LocalDate.now();
+        LocalDate fechaInicio = hoy.plusDays(diasMinimo);
+        LocalDate fechaFin = hoy.plusDays(diasMaximo);
+
+        List<SocioMembresia> membresias = socioMembresiaRepository
+                .findMembresiasPorVencerEnRango(fechaInicio, fechaFin);
+
+        if (membresias.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return membresias.stream()
+                .map(this::convertirAPorVencerDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Convierte una entidad SocioMembresia a un DTO de membresía por vencer
+     * 
+     * @param sm La entidad SocioMembresia a convertir
+     * @return Un objeto MembresiaPorVencerDTO con los datos de la membresía por
+     *         vencer
+     */
+    private MembresiaPorVencerDTO convertirAPorVencerDTO(SocioMembresia sm) {
+        UsuarioPerfil socio = sm.getSocio();
+        LocalDate hoy = LocalDate.now();
+        long dias = hoy.until(sm.getFechaVencimiento()).getDays();
+        int diasRestantes = (int) Math.max(0, dias);
+
+        String urgencia;
+        if (diasRestantes <= 1) {
+            urgencia = "CRITICO";
+        } else if (diasRestantes <= 2) {
+            urgencia = "URGENTE";
+        } else {
+            urgencia = "PRONTO";
+        }
+
+        return MembresiaPorVencerDTO.builder()
+                .idSocioMembresia(sm.getIdSocioMembresia())
+                .idSocio(socio.getIdUsuario())
+                .nombreSocio(socio.getNombre() + " " + socio.getApellido())
+                .emailSocio(socio.getEmail())
+                .telefono(socio.getTelefono())
+                .idMembresia(sm.getMembresia().getIdMembresia())
+                .nombreMembresia(sm.getMembresia().getNombre())
+                .fechaVencimiento(sm.getFechaVencimiento())
+                .diasRestantes(diasRestantes)
+                .estado(sm.getEstado().name())
+                .urgencia(urgencia)
+                .avatarUrl(generarAvatarUrl(socio.getNombre()))
+                .build();
+    }
+
+    /**
+     * Genera una URL de avatar basada en el nombre del socio.
+     * 
+     * @param nombre Nombre del socio
+     * @return URL del avatar generado
+     */
+    private String generarAvatarUrl(String nombre) {
+        return "https://ui-avatars.com/api/?name=" +
+                nombre.replace(" ", "+") +
+                "&background=0F1C3F&color=fff&bold=true";
+    }
 }

@@ -16,14 +16,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.pulse_gym.lb_common.dto.AsignarMembresiaFlexibleRequestDTO;
 import com.pulse_gym.lb_common.dto.AsignarMembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.EstadoMembresiaResponseDTO;
+import com.pulse_gym.lb_common.dto.MembresiaPorVencerDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RenovarMembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.SocioMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.SuspenderMembresiaRequestDTO;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
+import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
 import com.pulse_gym.ms_users.service.SocioMembresiaService;
 
@@ -190,42 +193,42 @@ public class SocioMembresiaController {
      * @return DTO con los datos de la membresía activa del socio, o null si no
      *         tiene ninguna activa, con código HTTP 200
      */
-@GetMapping("/socio/{idSocio}/activa")
-public ResponseEntity<SocioMembresiaResponseDTO> obtenerMembresiaActiva(
-        @PathVariable Long idSocio,
-        @RequestHeader(value = "X-User-Rol", required = false) String userRol,
-        @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
-    
-    try {
-        // Consultar todas las membresías del socio usando email
-        List<SocioMembresiaResponseDTO> membresias = socioMembresiaService.consultarMembresiasSocio(
-                idSocio, userRol, userEmail);
-        
-        // Filtrar la membresía activa
-        SocioMembresiaResponseDTO activa = membresias.stream()
-                .filter(SocioMembresiaResponseDTO::getEstaActiva)
-                .findFirst()
-                .orElse(null);
-        
-        return ResponseEntity.ok(activa);
-        
-    } catch (SecurityAuthorizationException e) {
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
-        
-    } catch (RuntimeException e) {
-        if (e.getMessage().contains("no encontrado")) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+    @GetMapping("/socio/{idSocio}/activa")
+    public ResponseEntity<SocioMembresiaResponseDTO> obtenerMembresiaActiva(
+            @PathVariable Long idSocio,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
+        try {
+            // Consultar todas las membresías del socio usando email
+            List<SocioMembresiaResponseDTO> membresias = socioMembresiaService.consultarMembresiasSocio(
+                    idSocio, userRol, userEmail);
+
+            // Filtrar la membresía activa
+            SocioMembresiaResponseDTO activa = membresias.stream()
+                    .filter(SocioMembresiaResponseDTO::getEstaActiva)
+                    .findFirst()
+                    .orElse(null);
+
+            return ResponseEntity.ok(activa);
+
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no encontrado")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener membresía activa",
+                    e);
         }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
-        
-    } catch (Exception e) {
-        throw new ResponseStatusException(
-            HttpStatus.INTERNAL_SERVER_ERROR, 
-            "Error al obtener membresía activa", 
-            e
-        );
     }
-}
+
     /**
      * Consultar estado de membresía desde app
      * 
@@ -290,4 +293,85 @@ public ResponseEntity<SocioMembresiaResponseDTO> obtenerMembresiaActiva(
                     "Error al consultar estado de membresía", e);
         }
     }
+
+    /**
+     * Endpoint para asignar una membresía flexible a un socio. Recibe un DTO con
+     * los datos necesarios para la asignación y el rol del usuario que realiza la
+     * solicitud.
+     * 
+     * @param requestDTO DTO con los datos necesarios para asignar la membresía
+     *                   flexible al socio
+     * @param userRol    Rol del usuario que realiza la solicitud, obtenido del
+     *                   encabezado "X-User-Rol"
+     * @return ResponseEntity con un mensaje global indicando el resultado de la
+     *         operación y el código de estado HTTP correspondiente
+     */
+    @PostMapping("/asignar-flexible")
+    public ResponseEntity<MessegeGlobalDTO> asignarMembresiaFlexible(
+            @Valid @RequestBody AsignarMembresiaFlexibleRequestDTO requestDTO,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            MessegeGlobalDTO response = socioMembresiaService.asignarMembresiaFlexible(requestDTO, userRol);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al asignar membresía flexible", e);
+        }
+    }
+
+    /**
+     * Obtiene todas las membresías activas que están por vencer (próximos 5 días)
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista de membresías por vencer con su nivel de urgencia
+     */
+    @GetMapping("/por-vencer")
+    public ResponseEntity<List<MembresiaPorVencerDTO>> obtenerMembresiasPorVencer(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+            List<MembresiaPorVencerDTO> resultado = socioMembresiaService.obtenerMembresiasPorVencer();
+            return ResponseEntity.ok(resultado);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener membresías por vencer", e);
+        }
+    }
+
+    /**
+     * Obtiene membresías por vencer en un rango específico de días
+     * 
+     * @param diasMinimo Días mínimos desde hoy (ej: 1)
+     * @param diasMaximo Días máximos desde hoy (ej: 5)
+     * @param userRol    Rol del usuario autenticado
+     * @return Lista de membresías por vencer en el rango
+     */
+    @GetMapping("/por-vencer/rango")
+    public ResponseEntity<List<MembresiaPorVencerDTO>> obtenerMembresiasPorVencerEnRango(
+            @RequestParam(defaultValue = "1") int diasMinimo,
+            @RequestParam(defaultValue = "5") int diasMaximo,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            List<MembresiaPorVencerDTO> resultado = socioMembresiaService
+                    .obtenerMembresiasPorVencerEnRango(diasMinimo, diasMaximo, userRol);
+            return ResponseEntity.ok(resultado);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener membresías por vencer en rango", e);
+        }
+    }
+
 }
