@@ -419,26 +419,63 @@ public class MembresiaService {
      * @return Un DTO con la información del socio asignado y su membresía
      */
     private SocioAsignadoDTO convertirSocioMembresiaASocioAsignadoDTO(SocioMembresia socioMembresia) {
-        Long diasRestantes = socioMembresia.getDiasRestantes();
-
         String nombreCompleto = socioMembresia.getSocio().getNombre();
         if (socioMembresia.getSocio().getApellido() != null && !socioMembresia.getSocio().getApellido().isEmpty()) {
             nombreCompleto += " " + socioMembresia.getSocio().getApellido();
         }
 
+        Boolean esFlexible = socioMembresia.getMembresia() != null
+                && Boolean.TRUE.equals(socioMembresia.getMembresia().getEsFlexible());
+        BigDecimal precioPorDia = socioMembresia.getMembresia() != null
+                ? socioMembresia.getMembresia().getPrecioPorDia()
+                : null;
+
+        Integer cantidadDias = null;
+        if (esFlexible) {
+            if (socioMembresia.getCantidadDias() != null) {
+                cantidadDias = socioMembresia.getCantidadDias();
+            } else if (socioMembresia.getFechaInicio() != null && socioMembresia.getFechaVencimiento() != null) {
+                cantidadDias = (int) java.time.temporal.ChronoUnit.DAYS.between(
+                        socioMembresia.getFechaInicio(),
+                        socioMembresia.getFechaVencimiento());
+            }
+        }
+
+        BigDecimal precioReal = socioMembresia.getPrecioReal();
+        if (precioReal == null && socioMembresia.getMembresia() != null) {
+            if (esFlexible && precioPorDia != null && cantidadDias != null) {
+                precioReal = precioPorDia.multiply(BigDecimal.valueOf(cantidadDias));
+            } else {
+                precioReal = socioMembresia.getMembresia().getPrecioTotal();
+            }
+        }
+
+        String tipoMembresiaDescripcion = esFlexible
+                ? "Flexible - " + (cantidadDias != null ? cantidadDias : 0) + " días"
+                : (socioMembresia.getMembresia() != null ? socioMembresia.getMembresia().getDuracionDescripcion()
+                        : null);
+
         return SocioAsignadoDTO.builder()
+                .idSocioMembresia(socioMembresia.getIdSocioMembresia())
                 .idSocio(socioMembresia.getSocio().getIdUsuario())
                 .nombreCompleto(nombreCompleto)
                 .email(socioMembresia.getSocio().getEmail())
                 .telefono(socioMembresia.getSocio().getTelefono())
-                .idSocioMembresia(socioMembresia.getIdSocioMembresia())
+                .precioTotal(precioReal)
+                .precioReal(precioReal)
+                .esFlexible(esFlexible)
+                .precioPorDia(precioPorDia)
+                .cantidadDias(cantidadDias)
+                .tipoMembresiaDescripcion(tipoMembresiaDescripcion)
                 .fechaInicio(socioMembresia.getFechaInicio())
                 .fechaVencimiento(socioMembresia.getFechaVencimiento())
                 .estado(socioMembresia.getEstado().name())
-                .diasRestantes(diasRestantes)
+                .diasRestantes(socioMembresia.getDiasRestantes())
+                .estaActiva(socioMembresia.isActiva())
+                .estaVencida(socioMembresia.isVencida())
                 .observaciones(socioMembresia.getObservaciones())
                 .fechaCreacion(socioMembresia.getFechaCreacion())
+                .fechaActualizacion(socioMembresia.getFechaActualizacion())
                 .build();
     }
-
 }
