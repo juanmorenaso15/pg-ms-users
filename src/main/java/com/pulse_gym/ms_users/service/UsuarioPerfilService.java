@@ -876,4 +876,21 @@ public class UsuarioPerfilService {
         log.info("Huella eliminada correctamente para usuario ID: {}", idUsuario);
         return new MessegeGlobalDTO("Huella eliminada correctamente");
     }
+
+    /**
+     * Actualiza el estado interno de un usuario por su email.
+     * Este método es útil para integraciones internas donde se necesita cambiar
+     * el estado del usuario sin exponerlo a través de la API pública.
+     * 
+     * @param email      Email del usuario
+     * @param nuevoEstado Nuevo estado a asignar (EnumEstadoUsuario)
+     */
+    @Transactional
+    public void actualizarEstadoInternoPorEmail(String email, EnumEstadoUsuario nuevoEstado) {
+        UsuarioPerfil usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Perfil de usuario no encontrado con email: " + email));
+
+        usuario.setEstado(nuevoEstado);
+        usuarioRepository.save(usuario);
+    }
 }
