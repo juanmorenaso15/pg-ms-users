@@ -283,6 +283,7 @@ public class MembresiaController {
 
     /**
      * Lista todas las membresías con sus socios activos
+     * 
      * @param userRol Rol del usuario autenticado (X-User-Rol)
      * @return Lista de DTOs con membresías y sus socios activos
      */
@@ -302,6 +303,36 @@ public class MembresiaController {
             throw new ResponseStatusException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al consultar las membresías con sus socios activos",
+                    e);
+        }
+    }
+
+    /**
+     * Endpoint para obtener una membresía por su ID (siempre devuelve la membresía,
+     * incluso sin socios)
+     * 
+     * @param idMembresia ID de la membresía a consultar
+     * @param userRol     Rol del usuario autenticado (X-User-Rol)
+     * @return DTO con la información de la membresía
+     */
+    @GetMapping("/{idMembresia}")
+    public ResponseEntity<MembresiaResponseDTO> obtenerMembresiaPorId(
+            @PathVariable Long idMembresia,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            MembresiaResponseDTO resultado = membresiaService.obtenerMembresiaPorId(idMembresia, userRol);
+            return ResponseEntity.ok(resultado);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no encontrada")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener la membresía",
                     e);
         }
     }
