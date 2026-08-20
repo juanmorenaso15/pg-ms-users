@@ -441,4 +441,21 @@ public class MembresiaService {
                 .build();
     }
 
+    /**
+     * Obtiene una membresía por su ID (siempre devuelve la membresía, incluso sin
+     * socios)
+     * 
+     * @param idMembresia ID de la membresía a consultar
+     * @param userRol     Rol del usuario autenticado
+     * @return DTO con la información de la membresía
+     */
+    @Transactional(readOnly = true)
+    public MembresiaResponseDTO obtenerMembresiaPorId(Long idMembresia, String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        Membresia membresia = membresiaRepository.findById(idMembresia)
+                .orElseThrow(() -> new RuntimeException("Membresía no encontrada con ID: " + idMembresia));
+
+        return convertirAResponseDTO(membresia);
+    }
 }
