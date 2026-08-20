@@ -46,7 +46,8 @@ public class UsuarioPerfilController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
 
         try {
-            MessegeGlobalDTO response = usuarioService.completarPerfil(userEmail, request, userRol, userEmail);
+
+            MessegeGlobalDTO response = usuarioService.completarPerfil(request, userRol, userEmail);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (SecurityAuthorizationException e) {
             throw e;
