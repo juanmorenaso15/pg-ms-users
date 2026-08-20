@@ -124,10 +124,7 @@ public class UsuarioPerfilService {
      * @return true si la calidad es aceptable, false en caso contrario
      */
     private boolean validarCalidadHuella(String deviceId) {
-        // Simulación: consideramos que una huella es de buena calidad si:
-        // 1. No es nula ni vacía
-        // 2. Tiene una longitud mínima de 10 caracteres (para evitar IDs muy cortos)
-        // 3. Contiene al menos un número (para simular que tiene información variada)
+
         if (deviceId == null || deviceId.trim().isEmpty()) {
             log.warn("Calidad de huella rechazada: deviceId nulo o vacío");
             return false;
@@ -152,6 +149,9 @@ public class UsuarioPerfilService {
      * @param userRol Rol del usuario autenticado
      */
     private void validarCamposPorRol(CompletarPerfilRequestDTO request, String userRol) {
+        if (request.getEmail() == null || request.getEmail().isEmpty()) {
+            throw new RuntimeException("El email es obligatorio");
+        }
         if (request.getNombre() == null || request.getNombre().isEmpty()) {
             throw new RuntimeException("El nombre es obligatorio");
         }
@@ -234,21 +234,52 @@ public class UsuarioPerfilService {
      * @return Mensaje de confirmación
      */
     @Transactional
-    public MessegeGlobalDTO completarPerfil(String email, CompletarPerfilRequestDTO request,
+    public MessegeGlobalDTO completarPerfil(CompletarPerfilRequestDTO request,
             String userRol, String userEmail) {
 
-        if (!userEmail.equals(email)) {
-            throw new SecurityAuthorizationException("Acceso denegado. Solo puede completar su propio perfil");
+        boolean esAdmin = EnumRol.administrador.name().equals(userRol);
+        boolean esRecepcionista = EnumRol.recepcionista.name().equals(userRol);
+        boolean esEntrenador = EnumRol.entrenador.name().equals(userRol);
+        boolean esSocio = EnumRol.socio.name().equals(userRol);
+        boolean esAdminORecepcionistaOEntrenador = esAdmin || esRecepcionista || esEntrenador;
+
+        String emailUsuarioACompletar;
+
+        if (esSocio) {
+            emailUsuarioACompletar = userEmail;
+            if (emailUsuarioACompletar == null || emailUsuarioACompletar.trim().isEmpty()) {
+                throw new RuntimeException("No se pudo obtener el email del usuario autenticado");
+            }
+            if (request.getEmail() != null && !request.getEmail().isEmpty()) {
+                throw new RuntimeException("Los socios no pueden especificar un email en la solicitud");
+            }
+        } else if (esAdminORecepcionistaOEntrenador) {
+            emailUsuarioACompletar = request.getEmail();
+            if (emailUsuarioACompletar == null || emailUsuarioACompletar.trim().isEmpty()) {
+                throw new RuntimeException("El email del usuario a completar es obligatorio para este rol");
+            }
+        } else {
+            throw new SecurityAuthorizationException("Rol no autorizado para completar perfiles");
         }
 
-        if (usuarioRepository.findByEmail(email).isPresent()) {
+        AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(emailUsuarioACompletar);
+        if (authUser == null) {
+            throw new RuntimeException("El usuario con email " + emailUsuarioACompletar + " no existe en el sistema");
+        }
+
+        if (esSocio) {
+
+        }
+
+        if (usuarioRepository.findByEmail(emailUsuarioACompletar).isPresent()) {
             throw new RuntimeException("El usuario ya tiene un perfil completado");
         }
 
-        validarCamposPorRol(request, userRol);
+        EnumRol rolUsuarioACompletar = authUser.getRol();
+        validarCamposPorRol(request, rolUsuarioACompletar.name());
 
         UsuarioPerfil usuario = new UsuarioPerfil();
-        usuario.setEmail(email);
+        usuario.setEmail(emailUsuarioACompletar);
         usuario.setNombre(request.getNombre());
         usuario.setApellido(request.getApellido());
         usuario.setTelefono(request.getTelefono());
@@ -258,10 +289,9 @@ public class UsuarioPerfilService {
         usuario.setContactoEmergenciaNombre(request.getContactoEmergenciaNombre());
         usuario.setContactoEmergenciaTelefono(request.getContactoEmergenciaTelefono());
         usuario.setIdSede(request.getIdSede());
-
         usuario.setEstado(EnumEstadoUsuario.ACTIVO);
 
-        if (EnumRol.socio.name().equals(userRol)) {
+        if (EnumRol.socio.name().equals(rolUsuarioACompletar.name())) {
             usuario.setObjetivoPrincipal(request.getObjetivoPrincipal());
             usuario.setNivelExperiencia(request.getNivelExperiencia());
             usuario.setEspecialidad(null);
@@ -270,7 +300,7 @@ public class UsuarioPerfilService {
             usuario.setTarifaHora(null);
             usuario.setTurno(null);
             usuario.setFechaContratacion(null);
-        } else if (EnumRol.entrenador.name().equals(userRol)) {
+        } else if (EnumRol.entrenador.name().equals(rolUsuarioACompletar.name())) {
             usuario.setObjetivoPrincipal(request.getObjetivoPrincipal());
             usuario.setNivelExperiencia(request.getNivelExperiencia());
             usuario.setEspecialidad(request.getEspecialidad());
@@ -279,7 +309,7 @@ public class UsuarioPerfilService {
             usuario.setTarifaHora(request.getTarifaHora());
             usuario.setTurno(request.getTurno());
             usuario.setFechaContratacion(request.getFechaContratacion());
-        } else if (EnumRol.administrador.name().equals(userRol)) {
+        } else if (EnumRol.administrador.name().equals(rolUsuarioACompletar.name())) {
             usuario.setFechaContratacion(request.getFechaContratacion());
             usuario.setEspecialidad(null);
             usuario.setAnosExperiencia(null);
@@ -288,7 +318,7 @@ public class UsuarioPerfilService {
             usuario.setTurno(null);
             usuario.setObjetivoPrincipal(null);
             usuario.setNivelExperiencia(EnumNivelExperiencia.intermedio);
-        } else if (EnumRol.recepcionista.name().equals(userRol)) {
+        } else if (EnumRol.recepcionista.name().equals(rolUsuarioACompletar.name())) {
             usuario.setFechaContratacion(request.getFechaContratacion());
             usuario.setTurno(request.getTurno());
             usuario.setEspecialidad(null);
@@ -313,7 +343,6 @@ public class UsuarioPerfilService {
                 throw new RuntimeException("Error de integridad de datos: " + errorMessage);
             }
         }
-        usuarioRepository.save(usuario);
 
         enviarNotificacionBienvenida(usuario);
 
@@ -780,13 +809,11 @@ public class UsuarioPerfilService {
                     "La calidad de la huella no es suficiente. Intente nuevamente con una captura más clara.");
         }
 
-        // 4. Generar hash del deviceId
         String hashDeviceId = generarHashDeviceId(request.getDeviceId());
         if (hashDeviceId == null) {
             throw new RuntimeException("Error al procesar la huella. Intente nuevamente.");
         }
 
-        // 5. Guardar el hash en lugar del deviceId plano
         usuario.setBiometricDeviceId(hashDeviceId);
         usuarioRepository.save(usuario);
 
@@ -812,7 +839,6 @@ public class UsuarioPerfilService {
         UsuarioPerfil usuario = usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // Validar permisos
         if (userRol.equals(EnumRol.socio.name())) {
             AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorId(userIdAutenticado);
             if (authUser == null) {
@@ -857,7 +883,6 @@ public class UsuarioPerfilService {
         UsuarioPerfil usuario = usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // Validar permisos
         if (userRol.equals(EnumRol.socio.name())) {
             AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorId(userIdAutenticado);
             if (authUser == null) {
