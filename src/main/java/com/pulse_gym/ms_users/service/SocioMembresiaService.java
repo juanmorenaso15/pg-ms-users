@@ -246,6 +246,7 @@ public class SocioMembresiaService {
                 .orElseThrow(() -> new RuntimeException(
                         "Asignación de membresía no encontrada con ID: " + requestDTO.getIdSocioMembresia()));
 
+        // Validación de Roles
         if (userRol.equals(EnumRol.socio.name())) {
             if (!userIdAutenticado.equals(socioMembresia.getSocio().getIdUsuario())) {
                 throw new SecurityAuthorizationException("Acceso denegado. Solo puede renovar su propia membresía");
@@ -264,11 +265,32 @@ public class SocioMembresiaService {
         socioMembresiaRepository.save(socioMembresia);
 
         LocalDate nuevaFechaInicio = LocalDate.now();
-        LocalDate nuevaFechaVencimiento = calcularFechaVencimiento(nuevaFechaInicio, membresia);
+        LocalDate nuevaFechaVencimiento;
+        Integer diasAsignados = null;
+
+        boolean esFlexible = Boolean.TRUE.equals(membresia.getEsFlexible()) || socioMembresia.getCantidadDias() != null;
+
+        if (esFlexible) {
+
+            diasAsignados = requestDTO.getCantidadDias() != null
+                    ? requestDTO.getCantidadDias()
+                    : socioMembresia.getCantidadDias();
+
+            if (diasAsignados == null || diasAsignados <= 0) {
+                throw new RuntimeException(
+                        "Debe especificar una cantidad de días válida para renovar la membresía flexible");
+            }
+
+            nuevaFechaVencimiento = nuevaFechaInicio.plusDays(diasAsignados);
+        } else {
+            nuevaFechaVencimiento = calcularFechaVencimiento(nuevaFechaInicio, membresia);
+        }
 
         SocioMembresia nuevaMembresia = new SocioMembresia();
         nuevaMembresia.setSocio(socioMembresia.getSocio());
         nuevaMembresia.setMembresia(membresia);
+        nuevaMembresia.setCantidadDias(diasAsignados);
+        nuevaMembresia.setPrecioReal(socioMembresia.getPrecioReal());
         nuevaMembresia.setFechaInicio(nuevaFechaInicio);
         nuevaMembresia.setFechaVencimiento(nuevaFechaVencimiento);
         nuevaMembresia.setEstado(EnumEstadoSocioMembresia.ACTIVA);
@@ -278,7 +300,8 @@ public class SocioMembresiaService {
         socioMembresiaRepository.save(nuevaMembresia);
 
         return new MessegeGlobalDTO(String.format(
-                "Membresía renovada correctamente. Nueva fecha de vencimiento: %s",
+                "Membresía renovada correctamente por %s. Nueva fecha de vencimiento: %s",
+                esFlexible ? diasAsignados + " días" : "el período base",
                 nuevaFechaVencimiento));
     }
 
