@@ -22,8 +22,8 @@ import com.pulse_gym.lb_common.dto.AuthUserDTO;
 import com.pulse_gym.lb_common.dto.CompletarPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RegistroHuellaRequestDTO;
-import com.pulse_gym.lb_common.dto.UsuarioPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
+import com.pulse_gym.lb_common.dto.UsuarioPerfilUpdateDTO;
 import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.service.UsuarioPerfilService;
@@ -197,9 +197,9 @@ public class UsuarioPerfilController {
      * @return Respuesta con mensaje de éxito o error
      */
     @PutMapping("/{idUsuario}")
-    public ResponseEntity<MessegeGlobalDTO> actualizarUsuarioCompleto(
+    public ResponseEntity<MessegeGlobalDTO> actualizarUsuario(
             @PathVariable Long idUsuario,
-            @Valid @RequestBody UsuarioPerfilRequestDTO requestDTO,
+            @RequestBody UsuarioPerfilUpdateDTO requestDTO,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
@@ -210,7 +210,8 @@ public class UsuarioPerfilController {
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al actualizar el usuario", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al actualizar el usuario: " + e.getMessage(), e);
         }
     }
 
@@ -230,7 +231,7 @@ public class UsuarioPerfilController {
     @PatchMapping("/{idUsuario}")
     public ResponseEntity<MessegeGlobalDTO> actualizarUsuarioParcial(
             @PathVariable Long idUsuario,
-            @RequestBody UsuarioPerfilRequestDTO requestDTO,
+            @RequestBody UsuarioPerfilUpdateDTO requestDTO,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
@@ -241,7 +242,8 @@ public class UsuarioPerfilController {
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al actualizar el usuario", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al actualizar el usuario: " + e.getMessage(), e);
         }
     }
 
