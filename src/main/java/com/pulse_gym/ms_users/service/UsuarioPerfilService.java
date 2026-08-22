@@ -907,7 +907,7 @@ public class UsuarioPerfilService {
      * Este método es útil para integraciones internas donde se necesita cambiar
      * el estado del usuario sin exponerlo a través de la API pública.
      * 
-     * @param email      Email del usuario
+     * @param email       Email del usuario
      * @param nuevoEstado Nuevo estado a asignar (EnumEstadoUsuario)
      */
     @Transactional
@@ -917,5 +917,25 @@ public class UsuarioPerfilService {
 
         usuario.setEstado(nuevoEstado);
         usuarioRepository.save(usuario);
+    }
+
+    /**
+     * Verifica si un usuario existe en el sistema de autenticación
+     * 
+     * @param email Email del usuario a verificar
+     * @return DTO con la información del usuario
+     */
+    public AuthUserDTO verificarUsuarioEnAuth(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            throw new RuntimeException("El email es obligatorio");
+        }
+
+        AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(email.trim());
+
+        if (authUser == null) {
+            throw new RuntimeException("Usuario no encontrado en el sistema de autenticación");
+        }
+
+        return authUser;
     }
 }
