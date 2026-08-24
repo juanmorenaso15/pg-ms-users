@@ -19,6 +19,7 @@ import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RegistroHuellaRequestDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
+import com.pulse_gym.lb_common.dto.UsuarioPerfilUpdateDTO;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
 import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
 import com.pulse_gym.lb_common.enums.EnumEventoAsociado;
@@ -529,6 +530,63 @@ public class UsuarioPerfilService {
     }
 
     /**
+     * Actualiza los campos básicos del usuario (comunes a todos los roles)
+     * 
+     * @param usuario Entidad a actualizar
+     * @param dto     Datos con los nuevos valores
+     */
+    private void actualizarCamposBasicos(UsuarioPerfil usuario, UsuarioPerfilUpdateDTO dto) {
+        if (dto.getNombre() != null)
+            usuario.setNombre(dto.getNombre());
+        if (dto.getApellido() != null)
+            usuario.setApellido(dto.getApellido());
+        if (dto.getTelefono() != null)
+            usuario.setTelefono(dto.getTelefono());
+        if (dto.getEmail() != null)
+            usuario.setEmail(dto.getEmail());
+        if (dto.getDocumentoIdentidad() != null)
+            usuario.setDocumentoIdentidad(dto.getDocumentoIdentidad());
+        if (dto.getFotoUrl() != null)
+            usuario.setFotoUrl(dto.getFotoUrl());
+        if (dto.getFechaNacimiento() != null)
+            usuario.setFechaNacimiento(dto.getFechaNacimiento());
+        if (dto.getContactoEmergenciaNombre() != null)
+            usuario.setContactoEmergenciaNombre(dto.getContactoEmergenciaNombre());
+        if (dto.getContactoEmergenciaTelefono() != null)
+            usuario.setContactoEmergenciaTelefono(dto.getContactoEmergenciaTelefono());
+        if (dto.getIdSede() != null)
+            usuario.setIdSede(dto.getIdSede());
+        if (dto.getObjetivoPrincipal() != null)
+            usuario.setObjetivoPrincipal(dto.getObjetivoPrincipal());
+        if (dto.getNivelExperiencia() != null)
+            usuario.setNivelExperiencia(dto.getNivelExperiencia());
+    }
+
+    /**
+     * Actualiza todos los campos del usuario (incluyendo campos específicos por
+     * rol)
+     * 
+     * @param usuario Entidad a actualizar
+     * @param dto     Datos con los nuevos valores
+     */
+    private void actualizarTodosLosCampos(UsuarioPerfil usuario, UsuarioPerfilUpdateDTO dto) {
+        actualizarCamposBasicos(usuario, dto);
+
+        if (dto.getFechaContratacion() != null)
+            usuario.setFechaContratacion(dto.getFechaContratacion());
+        if (dto.getEspecialidad() != null)
+            usuario.setEspecialidad(dto.getEspecialidad());
+        if (dto.getAnosExperiencia() != null)
+            usuario.setAnosExperiencia(dto.getAnosExperiencia());
+        if (dto.getHorarioDisponibilidad() != null)
+            usuario.setHorarioDisponibilidad(dto.getHorarioDisponibilidad());
+        if (dto.getTarifaHora() != null)
+            usuario.setTarifaHora(dto.getTarifaHora());
+        if (dto.getTurno() != null)
+            usuario.setTurno(dto.getTurno());
+    }
+
+    /**
      * Actualiza los datos de un usuario según el rol
      * - Admin/Recepcionista: Pueden actualizar todos los campos
      * - Socio: Solo puede actualizar datos de contacto (teléfono, email, dirección)
@@ -541,156 +599,35 @@ public class UsuarioPerfilService {
      * @return Mensaje de confirmación
      */
     @Transactional
-    public MessegeGlobalDTO actualizarUsuario(Long idUsuario, UsuarioPerfilRequestDTO requestDTO,
+    public MessegeGlobalDTO actualizarUsuario(Long idUsuario, UsuarioPerfilUpdateDTO requestDTO,
             String userRol, String userEmail) {
+
         if (idUsuario == null) {
             throw new RuntimeException("El ID del usuario no puede ser nulo");
         }
 
-        UsuarioPerfil usuarioExistente = usuarioRepository.findByIdAndEstado(idUsuario, EnumEstadoUsuario.ACTIVO)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado o inactivo con ID: " + idUsuario));
+        UsuarioPerfil usuario = usuarioRepository.findById(idUsuario)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + idUsuario));
 
-        if (usuarioExistente == null) {
-            throw new RuntimeException("Error: Usuario no encontrado");
+        boolean esSocio = EnumRol.socio.name().equalsIgnoreCase(userRol);
+        boolean esAdmin = EnumRol.administrador.name().equalsIgnoreCase(userRol);
+        boolean esRecepcionista = EnumRol.recepcionista.name().equalsIgnoreCase(userRol);
 
-        }
-
-        if (userRol.equals("socio")) {
-
-            if (!usuarioExistente.getEmail().equals(userEmail)) {
-                throw new SecurityAuthorizationException(
-                        "Acceso denegado. Solo puede actualizar su propio perfil");
+        if (esSocio) {
+            if (!usuario.getEmail().equals(userEmail)) {
+                throw new SecurityAuthorizationException("Acceso denegado. Solo puede actualizar su propio perfil");
             }
+            actualizarCamposBasicos(usuario, requestDTO);
 
-            actualizarDatosContacto(usuarioExistente, requestDTO);
-
-        } else if (userRol.equals("administrador") || userRol.equals("recepcionista")) {
-
-            actualizarTodosLosCampos(usuarioExistente, requestDTO);
+        } else if (esAdmin || esRecepcionista) {
+            actualizarTodosLosCampos(usuario, requestDTO);
 
         } else {
-            throw new SecurityAuthorizationException(
-                    "Acceso denegado. Rol no autorizado para actualizar usuarios: " + userRol);
+            throw new SecurityAuthorizationException("Rol no autorizado para actualizar usuarios: " + userRol);
         }
 
-        usuarioRepository.save(usuarioExistente);
+        usuarioRepository.save(usuario);
         return new MessegeGlobalDTO("Usuario actualizado correctamente");
-    }
-
-    /**
-     * Actualiza solo los datos de contacto del usuario (teléfono y email)
-     * 
-     * @param usuario    Entidad del usuario a actualizar
-     * @param requestDTO DTO con los nuevos datos de contacto
-     */
-    private void actualizarDatosContacto(UsuarioPerfil usuario, UsuarioPerfilRequestDTO requestDTO) {
-
-        if (requestDTO.getNombre() != null && !requestDTO.getNombre().isEmpty()) {
-            usuario.setNombre(requestDTO.getNombre());
-        }
-
-        if (requestDTO.getApellido() != null && !requestDTO.getApellido().isEmpty()) {
-            usuario.setApellido(requestDTO.getApellido());
-        }
-
-        if (requestDTO.getEmail() != null && !requestDTO.getEmail().isEmpty()) {
-            usuario.setEmail(requestDTO.getEmail());
-        }
-        if (requestDTO.getTelefono() != null) {
-            usuario.setTelefono(requestDTO.getTelefono());
-        }
-
-        if (requestDTO.getEmail() != null && !requestDTO.getEmail().isEmpty()) {
-            usuario.setEmail(requestDTO.getEmail());
-        }
-
-        if (requestDTO.getDocumentoIdentidad() != null && !requestDTO.getDocumentoIdentidad().isEmpty()) {
-            usuario.setDocumentoIdentidad(requestDTO.getDocumentoIdentidad());
-
-        }
-    }
-
-    /**
-     * Actualiza todos los campos del usuario (para administradores y
-     * recepcionistas)
-     * 
-     * @param usuario    Entidad del usuario a actualizar
-     * @param requestDTO DTO con los nuevos datos del usuario
-     */
-    private void actualizarTodosLosCampos(UsuarioPerfil usuario, UsuarioPerfilRequestDTO requestDTO) {
-
-        if (requestDTO.getNombre() != null) {
-            usuario.setNombre(requestDTO.getNombre());
-        }
-
-        if (requestDTO.getApellido() != null) {
-            usuario.setApellido(requestDTO.getApellido());
-        }
-
-        if (requestDTO.getTelefono() != null) {
-            usuario.setTelefono(requestDTO.getTelefono());
-        }
-
-        if (requestDTO.getEmail() != null && !requestDTO.getEmail().isEmpty()) {
-
-            usuario.setEmail(requestDTO.getEmail());
-        }
-
-        if (requestDTO.getDocumentoIdentidad() != null && !requestDTO.getDocumentoIdentidad().isEmpty()) {
-            usuario.setDocumentoIdentidad(requestDTO.getDocumentoIdentidad());
-
-        }
-        if (requestDTO.getFotoUrl() != null) {
-            usuario.setFotoUrl(requestDTO.getFotoUrl());
-        }
-
-        if (requestDTO.getFechaContratacion() != null) {
-            usuario.setFechaContratacion(requestDTO.getFechaContratacion());
-        }
-
-        if (requestDTO.getEspecialidad() != null) {
-            usuario.setEspecialidad(requestDTO.getEspecialidad());
-        }
-
-        if (requestDTO.getAnosExperiencia() != null) {
-            usuario.setAnosExperiencia(requestDTO.getAnosExperiencia());
-        }
-
-        if (requestDTO.getHorarioDisponibilidad() != null) {
-            usuario.setHorarioDisponibilidad(requestDTO.getHorarioDisponibilidad());
-        }
-
-        if (requestDTO.getTarifaHora() != null) {
-            usuario.setTarifaHora(requestDTO.getTarifaHora());
-        }
-
-        if (requestDTO.getTurno() != null) {
-            usuario.setTurno(requestDTO.getTurno());
-        }
-
-        if (requestDTO.getFechaNacimiento() != null) {
-            usuario.setFechaNacimiento(requestDTO.getFechaNacimiento());
-        }
-
-        if (requestDTO.getContactoEmergenciaNombre() != null) {
-            usuario.setContactoEmergenciaNombre(requestDTO.getContactoEmergenciaNombre());
-        }
-
-        if (requestDTO.getContactoEmergenciaTelefono() != null) {
-            usuario.setContactoEmergenciaTelefono(requestDTO.getContactoEmergenciaTelefono());
-        }
-
-        if (requestDTO.getObjetivoPrincipal() != null) {
-            usuario.setObjetivoPrincipal(requestDTO.getObjetivoPrincipal());
-        }
-
-        if (requestDTO.getNivelExperiencia() != null) {
-            usuario.setNivelExperiencia(requestDTO.getNivelExperiencia());
-        }
-
-        if (requestDTO.getIdSede() != null) {
-            usuario.setIdSede(requestDTO.getIdSede());
-        }
     }
 
     /**
@@ -907,7 +844,7 @@ public class UsuarioPerfilService {
      * Este método es útil para integraciones internas donde se necesita cambiar
      * el estado del usuario sin exponerlo a través de la API pública.
      * 
-     * @param email      Email del usuario
+     * @param email       Email del usuario
      * @param nuevoEstado Nuevo estado a asignar (EnumEstadoUsuario)
      */
     @Transactional
@@ -917,5 +854,25 @@ public class UsuarioPerfilService {
 
         usuario.setEstado(nuevoEstado);
         usuarioRepository.save(usuario);
+    }
+
+    /**
+     * Verifica si un usuario existe en el sistema de autenticación
+     * 
+     * @param email Email del usuario a verificar
+     * @return DTO con la información del usuario
+     */
+    public AuthUserDTO verificarUsuarioEnAuth(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            throw new RuntimeException("El email es obligatorio");
+        }
+
+        AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(email.trim());
+
+        if (authUser == null) {
+            throw new RuntimeException("Usuario no encontrado en el sistema de autenticación");
+        }
+
+        return authUser;
     }
 }

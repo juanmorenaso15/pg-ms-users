@@ -17,11 +17,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.pulse_gym.lb_common.client.AuthServiceClient;
+import com.pulse_gym.lb_common.dto.AuthUserDTO;
 import com.pulse_gym.lb_common.dto.CompletarPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RegistroHuellaRequestDTO;
-import com.pulse_gym.lb_common.dto.UsuarioPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
+import com.pulse_gym.lb_common.dto.UsuarioPerfilUpdateDTO;
 import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.service.UsuarioPerfilService;
@@ -38,6 +40,11 @@ public class UsuarioPerfilController {
      * Servicio de usuarios para la lógica de negocio
      */
     private final UsuarioPerfilService usuarioService;
+
+    /**
+     * Servicio de autenticación para verificar usuarios
+     */
+    private final AuthServiceClient authServiceClient;
 
     @PostMapping("/completar-perfil")
     public ResponseEntity<MessegeGlobalDTO> completarPerfil(
@@ -190,9 +197,9 @@ public class UsuarioPerfilController {
      * @return Respuesta con mensaje de éxito o error
      */
     @PutMapping("/{idUsuario}")
-    public ResponseEntity<MessegeGlobalDTO> actualizarUsuarioCompleto(
+    public ResponseEntity<MessegeGlobalDTO> actualizarUsuario(
             @PathVariable Long idUsuario,
-            @Valid @RequestBody UsuarioPerfilRequestDTO requestDTO,
+            @RequestBody UsuarioPerfilUpdateDTO requestDTO,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
@@ -203,7 +210,8 @@ public class UsuarioPerfilController {
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al actualizar el usuario", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al actualizar el usuario: " + e.getMessage(), e);
         }
     }
 
@@ -223,7 +231,7 @@ public class UsuarioPerfilController {
     @PatchMapping("/{idUsuario}")
     public ResponseEntity<MessegeGlobalDTO> actualizarUsuarioParcial(
             @PathVariable Long idUsuario,
-            @RequestBody UsuarioPerfilRequestDTO requestDTO,
+            @RequestBody UsuarioPerfilUpdateDTO requestDTO,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
@@ -234,7 +242,8 @@ public class UsuarioPerfilController {
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al actualizar el usuario", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al actualizar el usuario: " + e.getMessage(), e);
         }
     }
 
@@ -316,4 +325,44 @@ public class UsuarioPerfilController {
         }
     }
 
+    /**
+     * VERIFICAR USUARIO EN EL SISTEMA DE AUTENTICACIÓN
+     * 
+     * @param email Email del usuario a verificar
+     * @return Información del usuario si existe en Auth
+     */
+    @GetMapping("/auth/verificar-usuario")
+    public ResponseEntity<AuthUserDTO> verificarUsuario(
+            @RequestParam String email,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            if (userRol == null ||
+                    (!userRol.equalsIgnoreCase("administrador") &&
+                            !userRol.equalsIgnoreCase("entrenador") &&
+                            !userRol.equalsIgnoreCase("recepcionista"))) {
+                throw new SecurityAuthorizationException("No tienes permisos para verificar usuarios");
+            }
+
+            if (email == null || email.trim().isEmpty()) {
+                throw new RuntimeException("El email es obligatorio");
+            }
+
+            AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(email.trim());
+
+            if (authUser == null) {
+                throw new RuntimeException("Usuario no encontrado en el sistema de autenticación");
+            }
+
+            return ResponseEntity.status(HttpStatus.OK).body(authUser);
+
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al verificar el usuario: " + e.getMessage(), e);
+        }
+    }
 }
