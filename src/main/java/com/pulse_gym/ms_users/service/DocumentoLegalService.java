@@ -58,10 +58,7 @@ public class DocumentoLegalService {
             throw new RuntimeException("No se pudo verificar el rol del usuario");
         }
 
-        if (rolSocio != EnumRol.socio) {
-            throw new RuntimeException("Solo se pueden cargar documentos legales para socios. Rol actual: " + rolSocio);
-        }
-
+    
         DocumentoLegal documento = new DocumentoLegal();
         documento.setUsuario(usuario);
         documento.setTipoDocumento(requestDTO.getTipoDocumento());
