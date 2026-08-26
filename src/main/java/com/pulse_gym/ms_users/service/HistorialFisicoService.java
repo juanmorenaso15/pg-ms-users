@@ -31,19 +31,9 @@ import lombok.RequiredArgsConstructor;
 public class HistorialFisicoService {
 
     private final HistorialFisicoRepository historialRepository;
-
-    /** Repositorio del perfil del usuario */
     private final UsuarioPerfilRepository usuarioRepository;
-
-    /** Cliente del servicio de autenticación */
     private final AuthServiceClient authServiceClient;
 
-    /**
-     * Registra una nueva medición física para un socio
-     * 
-     * @param historial Medición física a registrar
-     * @return Mensaje de éxito si la medición se registró correctamente
-     */
     private HistorialFisicoResponseDTO convertirAResponseDTO(HistorialFisico historial) {
         HistorialFisicoResponseDTO dto = new HistorialFisicoResponseDTO();
         dto.setIdHistorialFisico(historial.getIdHistorialFisico());
@@ -122,8 +112,8 @@ public class HistorialFisicoService {
 
     private void calcularComposicionSiEsNecesario(HistorialFisico historial, HistorialFisicoRequestDTO requestDTO,
             UsuarioPerfil socio) {
-        BigDecimal peso = requestDTO.getPesoKg();
-        BigDecimal altura = requestDTO.getAlturaCm();
+        BigDecimal peso = historial.getPesoKg();
+        BigDecimal altura = historial.getAlturaCm();
 
         if ((altura == null || altura.doubleValue() <= 0) && socio.getPerfilMedico() != null
                 && socio.getPerfilMedico().getEstaturaCm() != null) {
@@ -131,24 +121,22 @@ public class HistorialFisicoService {
             historial.setAlturaCm(altura);
         }
 
-        BigDecimal grasa = requestDTO.getPorcentajeGrasa();
-        BigDecimal musculo = requestDTO.getPorcentajeMusculo();
+        BigDecimal grasa = requestDTO != null ? requestDTO.getPorcentajeGrasa() : historial.getPorcentajeGrasa();
+        BigDecimal musculo = requestDTO != null ? requestDTO.getPorcentajeMusculo() : historial.getPorcentajeMusculo();
 
         boolean calcularGrasa = (grasa == null || grasa.doubleValue() <= 0);
         boolean calcularMusculo = (musculo == null || musculo.doubleValue() <= 0);
 
         if (calcularGrasa && peso != null && peso.doubleValue() > 0) {
             double grasaCalculada = 0.0;
-
-            BigDecimal cintura = requestDTO.getCinturaCm();
+            BigDecimal cintura = historial.getCinturaCm();
 
             if (cintura != null && cintura.doubleValue() > 0) {
                 double cinturaInches = cintura.doubleValue() / 2.54;
                 double pesoLbs = peso.doubleValue() * 2.20462;
 
                 grasaCalculada = ((-98.42 + (4.15 * cinturaInches) - (0.082 * pesoLbs)) / pesoLbs) * 100.0;
-            }
-            else {
+            } else {
                 double alturaEfectivaCm = (altura != null && altura.doubleValue() > 0) ? altura.doubleValue() : 170.0;
                 double alturaM = alturaEfectivaCm / 100.0;
                 double imc = peso.doubleValue() / (alturaM * alturaM);
@@ -171,7 +159,6 @@ public class HistorialFisicoService {
         if (calcularMusculo) {
             if (grasa != null && grasa.doubleValue() > 0) {
                 double porcentajeMasaMagra = 100.0 - grasa.doubleValue();
-
                 double musculoCalculado = porcentajeMasaMagra * 0.52;
                 musculo = BigDecimal.valueOf(musculoCalculado).setScale(2, RoundingMode.HALF_UP);
             } else {
@@ -240,6 +227,9 @@ public class HistorialFisicoService {
             historial.setPiernaIzqCm(requestDTO.getPiernaIzqCm());
         if (requestDTO.getPiernaDerCm() != null)
             historial.setPiernaDerCm(requestDTO.getPiernaDerCm());
+
+        // Recalcular porcentaje de grasa y masa muscular si vienen en 0/null o si cambiaron valores base
+        calcularComposicionSiEsNecesario(historial, requestDTO, historial.getSocio());
 
         historialRepository.save(historial);
 
