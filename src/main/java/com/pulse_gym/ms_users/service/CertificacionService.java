@@ -173,4 +173,33 @@ public class CertificacionService {
         certificacionRepository.delete(certificacion);
         return new MessegeGlobalDTO("Certificación eliminada correctamente");
     }
+
+    /**
+     * Consulta todas las certificaciones registradas en la plataforma.
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista general de certificaciones
+     */
+    @Transactional(readOnly = true)
+    public List<CertificacionResponseDTO> consultarTodasLasCertificaciones(String userRol) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        List<Certificacion> certificaciones = certificacionRepository.findAll();
+
+        return certificaciones.stream()
+                .map(cert -> {
+                    CertificacionResponseDTO dto = new CertificacionResponseDTO();
+                    dto.setIdCertificacion(cert.getIdCertificacion());
+                    if (cert.getEntrenador() != null) {
+                        dto.setIdEntrenador(cert.getEntrenador().getIdUsuario());
+                        dto.setNombreEntrenador(
+                                cert.getEntrenador().getNombre() + " " + cert.getEntrenador().getApellido());
+                    }
+                    dto.setNombreCertificacion(cert.getNombre());
+                    dto.setUrlPdf(cert.getUrlPdf());
+                    dto.setFechaSubida(cert.getFechaSubida());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
 }

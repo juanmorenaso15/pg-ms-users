@@ -253,4 +253,21 @@ public class HistorialFisicoService {
         return evolucion;
     }
 
+    /**
+     * Obtiene el listado completo de historiales físicos de todos los socios
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista general de historiales físicos
+     */
+    @Transactional(readOnly = true)
+    public List<HistorialFisicoResponseDTO> obtenerTodosHistoriales(String userRol) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        List<HistorialFisico> historial = historialRepository.findAllByOrderByFechaMedicionDesc();
+
+        return historial.stream()
+                .map(this::convertirAResponseDTO)
+                .collect(Collectors.toList());
+    }
+
 }
