@@ -145,4 +145,28 @@ public class CertificacionController {
                     e);
         }
     }
+
+    /**
+     * Endpoint para consultar todas las certificaciones registradas.
+     * 
+     * @param userRol Rol del usuario obtenido del token
+     * @return Lista general de certificaciones
+     */
+    @GetMapping
+    public ResponseEntity<List<CertificacionResponseDTO>> consultarTodasLasCertificaciones(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            List<CertificacionResponseDTO> certificaciones = certificacionService
+                    .consultarTodasLasCertificaciones(userRol);
+            return ResponseEntity.status(HttpStatus.OK).body(certificaciones);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener todas las certificaciones", e);
+        }
+    }
 }
