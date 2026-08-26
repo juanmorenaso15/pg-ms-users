@@ -43,4 +43,10 @@ public interface HistorialFisicoRepository extends JpaRepository<HistorialFisico
      */
     @Query("SELECT h FROM HistorialFisico h WHERE h.socio.idUsuario = :idSocio ORDER BY h.fechaMedicion DESC LIMIT 1")
     HistorialFisico findLastMedicionBySocio(@Param("idSocio") Long idSocio);
+
+    /**
+     * Obtiene todos los registros de historial físico ordenados por fecha descendente
+     * @return Lista de registros físicos de todos los socios
+     */
+    List<HistorialFisico> findAllByOrderByFechaMedicionDesc();
 }

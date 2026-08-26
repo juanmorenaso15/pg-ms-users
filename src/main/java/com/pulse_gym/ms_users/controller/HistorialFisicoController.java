@@ -142,4 +142,26 @@ public class HistorialFisicoController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al obtener evolución", e);
         }
     }
+
+    /**
+     * Obtiene todos los registros de historial físico de todos los socios
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista general de historiales físicos
+     */
+    @GetMapping
+    public ResponseEntity<List<HistorialFisicoResponseDTO>> obtenerTodosHistoriales(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            List<HistorialFisicoResponseDTO> historial = historialService.obtenerTodosHistoriales(userRol);
+            return ResponseEntity.ok(historial);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al obtener todos los historiales", e);
+        }
+    }
 }
