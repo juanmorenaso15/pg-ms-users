@@ -89,7 +89,6 @@ public class SeguimientoService {
     /** Repositorio de historial de versiones de rutinas */
     private final HistorialRutinaVersionRepository historialRutinaVersionRepository;
 
-
     /**
      * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
      * 
@@ -805,5 +804,69 @@ public class SeguimientoService {
             log.error("Error al generar PDF del plan nutricional: {}", e.getMessage(), e);
             throw new RuntimeException("Error al generar el PDF del plan nutricional", e);
         }
+    }
+
+    /**
+     * Obtiene el dashboard de progreso del socio autenticado
+     * Todas las validaciones se realizan aquí (Service)
+     * 
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del socio autenticado (extraído del token)
+     * @return DTO con el dashboard de progreso del socio
+     * @throws SecurityAuthorizationException Si el usuario no es un socio
+     * @throws RuntimeException               Si el socio no existe
+     */
+    public DashboardProgresoSocioDTO obtenerMiDashboard(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            log.warn("Intento de acceso al dashboard por usuario no socio: {}", userEmail);
+            throw new SecurityAuthorizationException("Solo los socios pueden acceder a su dashboard de progreso");
+        }
+
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            log.warn("Intento de acceso al dashboard con email nulo o vacío");
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> {
+                    log.error("Socio no encontrado con email: {}", userEmail);
+                    return new RuntimeException("Socio no encontrado con email: " + userEmail);
+                });
+
+        if (!EnumEstadoUsuario.ACTIVO.equals(socio.getEstado())) {
+            log.warn("Intento de acceso al dashboard por socio inactivo: {}", userEmail);
+            throw new SecurityAuthorizationException("El usuario no se encuentra activo en el sistema");
+        }
+
+        DashboardProgresoSocioDTO dashboard = new DashboardProgresoSocioDTO();
+        dashboard.setIdSocio(socio.getIdUsuario());
+        dashboard.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
+        dashboard.setRachaDiasEntrenando(calcularRachaDias(socio.getIdUsuario()));
+        dashboard.setPorcentajeCumplimientoSemanal(calcularCumplimientoSemanal(socio.getIdUsuario()));
+        dashboard.setPorcentajeCumplimientoSemanaAnterior(calcularCumplimientoSemanaAnterior(socio.getIdUsuario()));
+        dashboard.setEvolucionEjercicios(calcularEvolucionEjercicios(socio.getIdUsuario()));
+
+        Map<String, Object> estadisticas = new HashMap<>();
+        estadisticas.put("totalSesiones", sesionRepository.countBySocio_IdUsuario(socio.getIdUsuario()));
+        estadisticas.put("promedioDuracion", calcularPromedioDuracion(socio.getIdUsuario()));
+        estadisticas.put("ultimaSesion", obtenerUltimaSesion(socio.getIdUsuario()));
+        dashboard.setEstadisticas(estadisticas);
+
+        log.info("Dashboard generado exitosamente para socio: {} (ID: {})", userEmail, socio.getIdUsuario());
+        return dashboard;
+    }
+
+    /**
+     * Obtiene la última sesión de entrenamiento de un socio
+     * 
+     * @param idSocio ID del socio
+     * @return Fecha de la última sesión o null si no hay
+     */
+    private LocalDateTime obtenerUltimaSesion(Long idSocio) {
+        List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
+        if (sesiones.isEmpty()) {
+            return null;
+        }
+        return sesiones.get(0).getFechaSesion();
     }
 }
