@@ -90,9 +90,18 @@ public class UsuarioPerfilService {
      * @param usuario Usuario del cual obtener el rol
      */
     private void enrichWithRol(UsuarioPerfilResponseDTO dto, UsuarioPerfil usuario) {
-        EnumRol rol = authServiceClient.obtenerRolPorEmail(usuario.getEmail());
-        if (rol != null) {
-            dto.setRol(rol);
+        try {
+            AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(usuario.getEmail());
+            if (authUser != null) {
+                if (authUser.getRol() != null) {
+                    dto.setRol(authUser.getRol());
+                }
+                if (authUser.getUsername() != null) {
+                    dto.setUsername(authUser.getUsername());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("No se pudo obtener datos de autenticación para el usuario: {}", usuario.getEmail(), e);
         }
     }
 
@@ -874,5 +883,34 @@ public class UsuarioPerfilService {
         }
 
         return authUser;
+    }
+
+    /**
+     * Consulta el perfil del usuario autenticado.
+     * Usa el email del token para identificar al usuario.
+     * 
+     * @param userRol   Rol del usuario autenticado (cualquier rol)
+     * @param userEmail Email del usuario autenticado (extraído del token)
+     * @return DTO con los datos del perfil del usuario autenticado
+     * @throws SecurityAuthorizationException
+     * @throws RuntimeException
+     */
+    @Transactional(readOnly = true)
+    public UsuarioPerfilResponseDTO consultarMiPerfil(String userRol, String userEmail) {
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil usuario = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + userEmail));
+
+        if (usuario.getEstado() != EnumEstadoUsuario.ACTIVO) {
+        throw new RuntimeException("El usuario no está activo");
+        }
+
+        UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
+        enrichWithRol(dto, usuario);
+
+        return dto;
     }
 }
