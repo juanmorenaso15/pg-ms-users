@@ -17,7 +17,6 @@ import com.pulse_gym.lb_common.dto.CompletarPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.EnvioEventoNotificacionDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RegistroHuellaRequestDTO;
-import com.pulse_gym.lb_common.dto.UsuarioPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilUpdateDTO;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
@@ -46,16 +45,14 @@ public class UsuarioPerfilService {
     /** Cliente de notificaciones */
     private final NotificacionClient notificacionClient;
 
-    /**
-     * Repositorio para operaciones de base de datos de usuarios
-     */
+    /** Repositorio para operaciones de base de datos de usuarios */
     private final UsuarioPerfilRepository usuarioRepository;
 
     /**
-     * Convierte una entidad UsuarioPerfil a su correspondiente DTO de respuesta
+     * Convierte una entidad UsuarioPerfil a UsuarioPerfilResponseDTO
      * 
-     * @param usuario Entidad de usuario a convertir (no puede ser nulo)
-     * @return DTO con todos los datos del usuario mapeados desde la entidad
+     * @param usuario Entidad a convertir
+     * @return DTO del usuario
      */
     private UsuarioPerfilResponseDTO convertirADTO(UsuarioPerfil usuario) {
         UsuarioPerfilResponseDTO dto = new UsuarioPerfilResponseDTO();
@@ -63,6 +60,7 @@ public class UsuarioPerfilService {
         dto.setNombre(usuario.getNombre());
         dto.setApellido(usuario.getApellido());
         dto.setEmail(usuario.getEmail());
+        dto.setSexo(usuario.getSexo());
         dto.setTelefono(usuario.getTelefono());
         dto.setDocumentoIdentidad(usuario.getDocumentoIdentidad());
         dto.setFotoUrl(usuario.getFotoUrl());
@@ -84,6 +82,13 @@ public class UsuarioPerfilService {
         return dto;
     }
 
+    /**
+     * Enriquece el DTO con el rol del usuario consultando el servicio de
+     * autenticación
+     * 
+     * @param dto     DTO a enriquecer
+     * @param usuario Usuario del cual obtener el rol
+     */
     private void enrichWithRol(UsuarioPerfilResponseDTO dto, UsuarioPerfil usuario) {
         EnumRol rol = authServiceClient.obtenerRolPorEmail(usuario.getEmail());
         if (rol != null) {
@@ -92,10 +97,11 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Genera un hash SHA-256 del deviceId para almacenar de forma segura.
+     * Genera un hash SHA-256 del deviceId para almacenamiento seguro
      * 
-     * @param deviceId Identificador del dispositivo biométrico (plano)
-     * @return Hash SHA-256 en formato hexadecimal, o null si deviceId es null/vacío
+     * @param deviceId ID del dispositivo biométrico
+     * @return Hash del deviceId o null si es vacío
+     * @throws RuntimeException Si ocurre un error al generar el hash
      */
     private String generarHashDeviceId(String deviceId) {
         if (deviceId == null || deviceId.trim().isEmpty()) {
@@ -119,13 +125,12 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Valida la calidad de la huella digital (simulación).
+     * Valida la calidad de la huella biométrica
      * 
-     * @param deviceId Identificador del dispositivo biométrico
+     * @param deviceId ID del dispositivo a validar
      * @return true si la calidad es aceptable, false en caso contrario
      */
     private boolean validarCalidadHuella(String deviceId) {
-
         if (deviceId == null || deviceId.trim().isEmpty()) {
             log.warn("Calidad de huella rechazada: deviceId nulo o vacío");
             return false;
@@ -144,10 +149,11 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Valida los campos obligatorios según el rol del usuario.
+     * Valida los campos obligatorios según el rol del usuario
      * 
-     * @param request DTO con los datos del perfil a completar
-     * @param userRol Rol del usuario autenticado
+     * @param request DTO con los datos del perfil
+     * @param userRol Rol del usuario a completar
+     * @throws RuntimeException Si falta algún campo obligatorio
      */
     private void validarCamposPorRol(CompletarPerfilRequestDTO request, String userRol) {
         if (request.getEmail() == null || request.getEmail().isEmpty()) {
@@ -225,14 +231,15 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Completa el perfil de un usuario que ya existe en el sistema de autenticación
+     * Completa el perfil de un usuario después del registro
      * 
-     * @param email      Email del usuario (identificador único)
-     * @param requestDTO Datos del perfil a completar
-     * @param userRol    Rol del usuario autenticado
-     * @param userEmail  Email del usuario autenticado (para validar que solo
-     *                   complete su propio perfil)
+     * @param request   Datos del perfil a completar
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
      * @return Mensaje de confirmación
+     * @throws RuntimeException               Si el usuario ya tiene perfil o faltan
+     *                                        datos
+     * @throws SecurityAuthorizationException Si el rol no está autorizado
      */
     @Transactional
     public MessegeGlobalDTO completarPerfil(CompletarPerfilRequestDTO request,
@@ -268,10 +275,6 @@ public class UsuarioPerfilService {
             throw new RuntimeException("El usuario con email " + emailUsuarioACompletar + " no existe en el sistema");
         }
 
-        if (esSocio) {
-
-        }
-
         if (usuarioRepository.findByEmail(emailUsuarioACompletar).isPresent()) {
             throw new RuntimeException("El usuario ya tiene un perfil completado");
         }
@@ -283,6 +286,7 @@ public class UsuarioPerfilService {
         usuario.setEmail(emailUsuarioACompletar);
         usuario.setNombre(request.getNombre());
         usuario.setApellido(request.getApellido());
+        usuario.setSexo(request.getSexo());
         usuario.setTelefono(request.getTelefono());
         usuario.setDocumentoIdentidad(request.getDocumentoIdentidad());
         usuario.setFotoUrl(request.getFotoUrl());
@@ -351,13 +355,12 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Envía notificación de bienvenida al completar perfil
+     * Envía una notificación de bienvenida al usuario completando el perfil
      * 
-     * @param usuario Usuario creado
+     * @param usuario Usuario al que enviar la notificación
      */
     private void enviarNotificacionBienvenida(UsuarioPerfil usuario) {
         try {
-            // Obtener ID de auth del usuario
             AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(usuario.getEmail());
             if (authUser == null) {
                 return;
@@ -371,15 +374,15 @@ public class UsuarioPerfilService {
                     "apellido", usuario.getApellido() != null ? usuario.getApellido() : ""));
             notificacionClient.enviarPorEvento(eventoDTO);
         } catch (Exception e) {
-            // No fallar el registro si falla el envío de notificación
+            // Error silencioso, no interrumpir el flujo principal
         }
     }
 
     /**
-     * Obtiene la lista de todos los usuarios activos
+     * Obtiene todos los usuarios activos
      * 
      * @param userRol Rol del usuario autenticado
-     * @return Lista de DTOs con los datos de los usuarios activos
+     * @return Lista de usuarios activos
      */
     @Transactional(readOnly = true)
     public List<UsuarioPerfilResponseDTO> obtenerTodosLosUsuariosActivo(String userRol) {
@@ -389,12 +392,17 @@ public class UsuarioPerfilService {
                 .map(usuario -> {
                     UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
                     enrichWithRol(dto, usuario);
-
                     return dto;
                 })
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Obtiene todos los usuarios inactivos
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista de usuarios inactivos
+     */
     @Transactional(readOnly = true)
     public List<UsuarioPerfilResponseDTO> obtenerTodosLosUsuariosInactivo(String userRol) {
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
@@ -402,14 +410,18 @@ public class UsuarioPerfilService {
         return usuarioRepository.findByEstado(EnumEstadoUsuario.INACTIVO).stream()
                 .map(usuario -> {
                     UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
-
                     enrichWithRol(dto, usuario);
-
                     return dto;
                 })
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Obtiene todos los usuarios (activos e inactivos)
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista de todos los usuarios
+     */
     @Transactional(readOnly = true)
     public List<UsuarioPerfilResponseDTO> obtenerTodosLosUsuarios(String userRol) {
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
@@ -417,27 +429,17 @@ public class UsuarioPerfilService {
         return usuarioRepository.findAll().stream()
                 .map(usuario -> {
                     UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
-
                     enrichWithRol(dto, usuario);
-
                     return dto;
                 })
                 .collect(Collectors.toList());
     }
 
     /**
-     * Obtiene un usuario activo por su ID
+     * Obtiene un usuario por email (uso interno)
      * 
-     * @param idUsuario ID del usuario a buscar
-     * @param userRol   Rol del usuario autenticado
-     * @return DTO con los datos del usuario
-     */
-    /**
-     * Obtiene el perfil de usuario por email sin validacion de rol para integracion
-     * interna
-     *
      * @param email Email del usuario
-     * @return DTO con los datos del perfil
+     * @return DTO del usuario
      */
     @Transactional(readOnly = true)
     public UsuarioPerfilResponseDTO obtenerUsuarioPorEmailInterno(String email) {
@@ -453,6 +455,13 @@ public class UsuarioPerfilService {
         return dto;
     }
 
+    /**
+     * Obtiene un usuario por ID
+     * 
+     * @param idUsuario ID del usuario
+     * @param userRol   Rol del usuario autenticado
+     * @return DTO del usuario
+     */
     @Transactional(readOnly = true)
     public UsuarioPerfilResponseDTO obtenerUsuarioPorId(Long idUsuario, String userRol) {
         ValidacionDeRoles.validarAdminORecepcionista(userRol);
@@ -471,11 +480,11 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Obtiene un usuario activo por su número de documento
+     * Obtiene un usuario por número de documento
      * 
-     * @param documentoIdentidad Número de documento del usuario
+     * @param documentoIdentidad Número de documento
      * @param userRol            Rol del usuario autenticado
-     * @return DTO con los datos del usuario
+     * @return DTO del usuario
      */
     @Transactional(readOnly = true)
     public UsuarioPerfilResponseDTO obtenerUsuarioPorNumeroDocumento(String documentoIdentidad, String userRol) {
@@ -497,11 +506,11 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Obtiene un usuario activo por su nombre
+     * Obtiene usuarios por nombre (búsqueda exacta, case-insensitive)
      * 
-     * @param nombre  Nombre del usuario a buscar
+     * @param nombre  Nombre del usuario
      * @param userRol Rol del usuario autenticado
-     * @return DTO con los datos del usuario
+     * @return Lista de usuarios que coinciden
      */
     @Transactional(readOnly = true)
     public List<UsuarioPerfilResponseDTO> obtenerUsuariosPorNombre(String nombre, String userRol) {
@@ -540,6 +549,8 @@ public class UsuarioPerfilService {
             usuario.setNombre(dto.getNombre());
         if (dto.getApellido() != null)
             usuario.setApellido(dto.getApellido());
+        if (dto.getSexo() != null)
+            usuario.setSexo(dto.getSexo());
         if (dto.getTelefono() != null)
             usuario.setTelefono(dto.getTelefono());
         if (dto.getEmail() != null)
@@ -587,16 +598,14 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Actualiza los datos de un usuario según el rol
-     * - Admin/Recepcionista: Pueden actualizar todos los campos
-     * - Socio: Solo puede actualizar datos de contacto (teléfono, email, dirección)
+     * Actualiza un usuario existente
      * 
      * @param idUsuario  ID del usuario a actualizar
-     * @param requestDTO Datos actualizados
-     * @param userRol    Rol del usuario que hace la petición
-     * @param userEmail  Email del usuario autenticado (para validar que socio solo
-     *                   actualice su propio perfil)
+     * @param requestDTO Datos a actualizar
+     * @param userRol    Rol del usuario autenticado
+     * @param userEmail  Email del usuario autenticado
      * @return Mensaje de confirmación
+     * @throws SecurityAuthorizationException Si el usuario no tiene permisos
      */
     @Transactional
     public MessegeGlobalDTO actualizarUsuario(Long idUsuario, UsuarioPerfilUpdateDTO requestDTO,
@@ -631,16 +640,15 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Cambia el estado de un usuario (ACTIVO/INACTIVO)
+     * Cambia el estado de un usuario (activar/desactivar)
      * 
      * @param idUsuario ID del usuario
-     * @param estado    Nuevo estado del usuario
+     * @param estado    Nuevo estado
      * @param userRol   Rol del usuario autenticado
      * @return Mensaje de confirmación
      */
     @Transactional
     public MessegeGlobalDTO cambiarEstadoUsuario(Long idUsuario, EnumEstadoUsuario estado, String userRol) {
-
         ValidacionDeRoles.validarAdminORecepcionista(userRol);
 
         if (idUsuario == null) {
@@ -668,7 +676,7 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Desactiva un usuario (cambia a estado INACTIVO)
+     * Desactiva un usuario
      * 
      * @param idUsuario ID del usuario
      * @param userRol   Rol del usuario autenticado
@@ -680,7 +688,7 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Activa un usuario (cambia a estado ACTIVO)
+     * Activa un usuario
      * 
      * @param idUsuario ID del usuario
      * @param userRol   Rol del usuario autenticado
@@ -692,11 +700,10 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Servicio para obtener usuario sin validacion de roles para comunicacion entre
-     * microservicios
+     * Obtiene un usuario por ID (uso interno)
      * 
-     * @param idUsuario
-     * @return
+     * @param idUsuario ID del usuario
+     * @return DTO del usuario
      */
     @Transactional(readOnly = true)
     public UsuarioPerfilResponseDTO obtenerUsuarioPorIdInterno(Long idUsuario) {
@@ -708,18 +715,13 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Registra una nueva huella digital para un socio.
-     * Valida la calidad de la huella y almacena el hash del deviceId.
+     * Registra una huella biométrica para un usuario
      * 
-     * @param idUsuario         ID del usuario (socio)
-     * @param request           DTO con el deviceId
+     * @param idUsuario         ID del usuario
+     * @param request           Datos de la huella
      * @param userRol           Rol del usuario autenticado
-     * @param userIdAutenticado ID del usuario autenticado (para validar que solo se
-     *                          registre su propia huella)
+     * @param userIdAutenticado ID del usuario autenticado
      * @return Mensaje de confirmación
-     * @throws SecurityAuthorizationException Si el usuario no tiene permisos
-     * @throws RuntimeException               Si la huella no es válida o el usuario
-     *                                        no es socio
      */
     @Transactional
     public MessegeGlobalDTO registrarHuella(Long idUsuario, RegistroHuellaRequestDTO request, String userRol,
@@ -760,11 +762,10 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Reemplaza una huella digital existente por una nueva.
-     * Valida la calidad y genera un nuevo hash.
+     * Reemplaza la huella biométrica de un usuario
      * 
-     * @param idUsuario         ID del usuario (socio)
-     * @param request           DTO con el nuevo deviceId
+     * @param idUsuario         ID del usuario
+     * @param request           Datos de la nueva huella
      * @param userRol           Rol del usuario autenticado
      * @param userIdAutenticado ID del usuario autenticado
      * @return Mensaje de confirmación
@@ -807,9 +808,9 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Elimina la huella digital de un socio.
+     * Elimina la huella biométrica de un usuario
      * 
-     * @param idUsuario         ID del usuario (socio)
+     * @param idUsuario         ID del usuario
      * @param userRol           Rol del usuario autenticado
      * @param userIdAutenticado ID del usuario autenticado
      * @return Mensaje de confirmación
@@ -840,12 +841,10 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Actualiza el estado interno de un usuario por su email.
-     * Este método es útil para integraciones internas donde se necesita cambiar
-     * el estado del usuario sin exponerlo a través de la API pública.
+     * Actualiza el estado de un usuario por email (uso interno)
      * 
      * @param email       Email del usuario
-     * @param nuevoEstado Nuevo estado a asignar (EnumEstadoUsuario)
+     * @param nuevoEstado Nuevo estado
      */
     @Transactional
     public void actualizarEstadoInternoPorEmail(String email, EnumEstadoUsuario nuevoEstado) {
@@ -857,10 +856,11 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Verifica si un usuario existe en el sistema de autenticación
+     * Verifica que un usuario exista en el sistema de autenticación
      * 
-     * @param email Email del usuario a verificar
-     * @return DTO con la información del usuario
+     * @param email Email del usuario
+     * @return Datos del usuario en autenticación
+     * @throws RuntimeException Si el usuario no existe
      */
     public AuthUserDTO verificarUsuarioEnAuth(String email) {
         if (email == null || email.trim().isEmpty()) {

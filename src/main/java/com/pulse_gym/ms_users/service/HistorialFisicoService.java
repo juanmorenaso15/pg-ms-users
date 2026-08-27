@@ -30,10 +30,21 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class HistorialFisicoService {
 
+    /** Repositorio de historial físico */
     private final HistorialFisicoRepository historialRepository;
+
+    /** Repositorio de usuarios */
     private final UsuarioPerfilRepository usuarioRepository;
+
+    /** Cliente Feign para consultar el servicio de autenticación */
     private final AuthServiceClient authServiceClient;
 
+    /**
+     * Convierte una entidad HistorialFisico a HistorialFisicoResponseDTO
+     * 
+     * @param historial Entidad a convertir
+     * @return DTO del historial físico
+     */
     private HistorialFisicoResponseDTO convertirAResponseDTO(HistorialFisico historial) {
         HistorialFisicoResponseDTO dto = new HistorialFisicoResponseDTO();
         dto.setIdHistorialFisico(historial.getIdHistorialFisico());
@@ -59,16 +70,31 @@ public class HistorialFisicoService {
 
         dto.setPorcentajeGrasa(historial.getPorcentajeGrasa());
         dto.setPorcentajeMusculo(historial.getPorcentajeMusculo());
+        dto.setCuelloCm(historial.getCuelloCm());
+        dto.setCinturaEscapularCm(historial.getCinturaEscapularCm());
         dto.setCinturaCm(historial.getCinturaCm());
+        dto.setCaderaCm(historial.getCaderaCm());
+        dto.setToraxCm(historial.getToraxCm());
         dto.setPechoCm(historial.getPechoCm());
         dto.setBrazoIzqCm(historial.getBrazoIzqCm());
         dto.setBrazoDerCm(historial.getBrazoDerCm());
         dto.setPiernaIzqCm(historial.getPiernaIzqCm());
         dto.setPiernaDerCm(historial.getPiernaDerCm());
+        dto.setPantorrillaIzqCm(historial.getPantorrillaIzqCm());
+        dto.setPantorrillaDerCm(historial.getPantorrillaDerCm());
 
         return dto;
     }
 
+    /**
+     * Registra una nueva medición física para un socio
+     * 
+     * @param requestDTO        Datos de la medición
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @return Mensaje de confirmación
+     * @throws RuntimeException Si el socio no existe o no es socio
+     */
     @Transactional
     public MessegeGlobalDTO registrarMedicion(HistorialFisicoRequestDTO requestDTO, String userRol,
             Long userIdAutenticado) {
@@ -96,12 +122,18 @@ public class HistorialFisicoService {
                 requestDTO.getFechaMedicion() != null ? requestDTO.getFechaMedicion() : LocalDateTime.now());
         historial.setPesoKg(requestDTO.getPesoKg());
         historial.setAlturaCm(requestDTO.getAlturaCm());
+        historial.setCuelloCm(requestDTO.getCuelloCm());
+        historial.setCinturaEscapularCm(requestDTO.getCinturaEscapularCm());
         historial.setCinturaCm(requestDTO.getCinturaCm());
+        historial.setCaderaCm(requestDTO.getCaderaCm());
+        historial.setToraxCm(requestDTO.getToraxCm());
         historial.setPechoCm(requestDTO.getPechoCm());
         historial.setBrazoIzqCm(requestDTO.getBrazoIzqCm());
         historial.setBrazoDerCm(requestDTO.getBrazoDerCm());
         historial.setPiernaIzqCm(requestDTO.getPiernaIzqCm());
         historial.setPiernaDerCm(requestDTO.getPiernaDerCm());
+        historial.setPantorrillaIzqCm(requestDTO.getPantorrillaIzqCm());
+        historial.setPantorrillaDerCm(requestDTO.getPantorrillaDerCm());
 
         calcularComposicionSiEsNecesario(historial, requestDTO, socio);
 
@@ -110,6 +142,14 @@ public class HistorialFisicoService {
         return new MessegeGlobalDTO("Medición física registrada correctamente para el socio: " + socio.getNombre());
     }
 
+    /**
+     * Calcula el porcentaje de grasa y músculo si no fueron proporcionados
+     * directamente
+     * 
+     * @param historial  Entidad a actualizar
+     * @param requestDTO DTO con los datos de la medición
+     * @param socio      Socio para obtener datos adicionales
+     */
     private void calcularComposicionSiEsNecesario(HistorialFisico historial, HistorialFisicoRequestDTO requestDTO,
             UsuarioPerfil socio) {
         BigDecimal peso = historial.getPesoKg();
@@ -130,15 +170,36 @@ public class HistorialFisicoService {
         if (calcularGrasa && peso != null && peso.doubleValue() > 0) {
             double grasaCalculada = 0.0;
             BigDecimal cintura = historial.getCinturaCm();
+            BigDecimal cuello = historial.getCuelloCm();
+            BigDecimal cadera = historial.getCaderaCm();
 
-            if (cintura != null && cintura.doubleValue() > 0) {
-                double cinturaInches = cintura.doubleValue() / 2.54;
-                double pesoLbs = peso.doubleValue() * 2.20462;
+            String sexoStr = socio.getSexo() != null ? socio.getSexo().name().toUpperCase() : "MASCULINO";
+            boolean esFemenino = sexoStr.contains("FEM");
 
-                grasaCalculada = ((-98.42 + (4.15 * cinturaInches) - (0.082 * pesoLbs)) / pesoLbs) * 100.0;
-            } else {
-                double alturaEfectivaCm = (altura != null && altura.doubleValue() > 0) ? altura.doubleValue() : 170.0;
-                double alturaM = alturaEfectivaCm / 100.0;
+            double altCm = (altura != null && altura.doubleValue() > 0) ? altura.doubleValue() : 170.0;
+
+            // Fórmula Marina EE.UU. (US Navy Body Fat Formula) para porcentaje exacto por
+            // antropometría
+            if (cintura != null && cuello != null && cintura.doubleValue() > cuello.doubleValue()) {
+                if (esFemenino && cadera != null && cadera.doubleValue() > 0) {
+                    double sumaCinCad = cintura.doubleValue() + cadera.doubleValue() - cuello.doubleValue();
+                    if (sumaCinCad > 0) {
+                        grasaCalculada = 495.0
+                                / (1.29579 - 0.35004 * Math.log10(sumaCinCad) + 0.22100 * Math.log10(altCm)) - 450.0;
+                    }
+                } else {
+                    double difCinCue = cintura.doubleValue() - cuello.doubleValue();
+                    if (difCinCue > 0) {
+                        grasaCalculada = 495.0
+                                / (1.0324 - 0.19077 * Math.log10(difCinCue) + 0.15456 * Math.log10(altCm)) - 450.0;
+                    }
+                }
+            }
+
+            // Si faltan medidas secundarias (cuello/cadera), se aplica la fórmula basada en
+            // IMC y Edad
+            if (grasaCalculada <= 0.0) {
+                double alturaM = altCm / 100.0;
                 double imc = peso.doubleValue() / (alturaM * alturaM);
 
                 int edad = 25;
@@ -146,11 +207,11 @@ public class HistorialFisicoService {
                     edad = Period.between(socio.getFechaNacimiento(), LocalDate.now()).getYears();
                 }
 
-                int factorSexo = 1;
+                int factorSexo = esFemenino ? 0 : 1;
                 grasaCalculada = (1.20 * imc) + (0.23 * edad) - (10.8 * factorSexo) - 5.4;
             }
 
-            grasaCalculada = Math.max(5.0, Math.min(55.0, grasaCalculada));
+            grasaCalculada = Math.max(4.0, Math.min(55.0, grasaCalculada));
             grasa = BigDecimal.valueOf(grasaCalculada).setScale(2, RoundingMode.HALF_UP);
         } else if (grasa == null) {
             grasa = BigDecimal.ZERO.setScale(2);
@@ -172,6 +233,15 @@ public class HistorialFisicoService {
         historial.setPorcentajeMusculo(musculo);
     }
 
+    /**
+     * Consulta el historial físico de un socio
+     * 
+     * @param idSocio           ID del socio
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @return Lista de registros del historial físico
+     * @throws SecurityAuthorizationException Si el usuario no tiene permisos
+     */
     @Transactional(readOnly = true)
     public List<HistorialFisicoResponseDTO> consultarHistorial(Long idSocio, String userRol, Long userIdAutenticado) {
 
@@ -199,6 +269,14 @@ public class HistorialFisicoService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Actualiza una medición física existente
+     * 
+     * @param idHistorial ID del registro a actualizar
+     * @param requestDTO  Datos actualizados
+     * @param userRol     Rol del usuario autenticado
+     * @return Mensaje de confirmación
+     */
     @Transactional
     public MessegeGlobalDTO actualizarMedicion(Long idHistorial, HistorialFisicoRequestDTO requestDTO, String userRol) {
 
@@ -215,8 +293,16 @@ public class HistorialFisicoService {
             historial.setPorcentajeGrasa(requestDTO.getPorcentajeGrasa());
         if (requestDTO.getPorcentajeMusculo() != null)
             historial.setPorcentajeMusculo(requestDTO.getPorcentajeMusculo());
+        if (requestDTO.getCuelloCm() != null)
+            historial.setCuelloCm(requestDTO.getCuelloCm());
+        if (requestDTO.getCinturaEscapularCm() != null)
+            historial.setCinturaEscapularCm(requestDTO.getCinturaEscapularCm());
         if (requestDTO.getCinturaCm() != null)
             historial.setCinturaCm(requestDTO.getCinturaCm());
+        if (requestDTO.getCaderaCm() != null)
+            historial.setCaderaCm(requestDTO.getCaderaCm());
+        if (requestDTO.getToraxCm() != null)
+            historial.setToraxCm(requestDTO.getToraxCm());
         if (requestDTO.getPechoCm() != null)
             historial.setPechoCm(requestDTO.getPechoCm());
         if (requestDTO.getBrazoIzqCm() != null)
@@ -227,8 +313,11 @@ public class HistorialFisicoService {
             historial.setPiernaIzqCm(requestDTO.getPiernaIzqCm());
         if (requestDTO.getPiernaDerCm() != null)
             historial.setPiernaDerCm(requestDTO.getPiernaDerCm());
+        if (requestDTO.getPantorrillaIzqCm() != null)
+            historial.setPantorrillaIzqCm(requestDTO.getPantorrillaIzqCm());
+        if (requestDTO.getPantorrillaDerCm() != null)
+            historial.setPantorrillaDerCm(requestDTO.getPantorrillaDerCm());
 
-        // Recalcular porcentaje de grasa y masa muscular si vienen en 0/null o si cambiaron valores base
         calcularComposicionSiEsNecesario(historial, requestDTO, historial.getSocio());
 
         historialRepository.save(historial);
@@ -236,6 +325,16 @@ public class HistorialFisicoService {
         return new MessegeGlobalDTO("Medición física actualizada correctamente");
     }
 
+    /**
+     * Obtiene la evolución física de un socio en un período de tiempo
+     * 
+     * @param idSocio           ID del socio
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @param fechaInicio       Fecha de inicio del período
+     * @param fechaFin          Fecha de fin del período
+     * @return DTO con la evolución física
+     */
     @Transactional(readOnly = true)
     public EvolucionFisicaDTO obtenerEvolucion(Long idSocio, String userRol, Long userIdAutenticado,
             LocalDateTime fechaInicio, LocalDateTime fechaFin) {
@@ -289,6 +388,12 @@ public class HistorialFisicoService {
         return evolucion;
     }
 
+    /**
+     * Obtiene todos los historiales físicos del sistema
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return Lista de todos los historiales
+     */
     @Transactional(readOnly = true)
     public List<HistorialFisicoResponseDTO> obtenerTodosHistoriales(String userRol) {
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
