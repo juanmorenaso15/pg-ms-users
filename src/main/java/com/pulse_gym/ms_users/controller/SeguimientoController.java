@@ -20,7 +20,10 @@ import com.pulse_gym.lb_common.dto.DashboardMonitoreoEntrenadorDTO;
 import com.pulse_gym.lb_common.dto.DashboardProgresoSocioDTO;
 import com.pulse_gym.lb_common.dto.RegistroSesionRequestDTO;
 import com.pulse_gym.lb_common.dto.SesionResponseDTO;
+import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
+import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
+import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
 import com.pulse_gym.ms_users.service.SeguimientoService;
 
 import jakarta.validation.Valid;
@@ -35,6 +38,8 @@ public class SeguimientoController {
 
     /** Servicio de seguimiento y progreso */
     private final SeguimientoService seguimientoService;
+
+    private final UsuarioPerfilRepository usuarioRepository;
 
     /**
      * Registra una sesión de entrenamiento realizada por un socio
@@ -193,9 +198,10 @@ public class SeguimientoController {
 
     /**
      * Exporta un plan nutricional a formato PDF
-     * @param idSocio ID del socio dueño del plan nutricional
-     * @param idPlan ID del plan nutricional a exportar (opcional)
-     * @param userRol Rol del usuario autenticado (header)
+     * 
+     * @param idSocio   ID del socio dueño del plan nutricional
+     * @param idPlan    ID del plan nutricional a exportar (opcional)
+     * @param userRol   Rol del usuario autenticado (header)
      * @param userEmail Email del usuario autenticado (header)
      * @return Archivo PDF del plan nutricional
      */
@@ -226,6 +232,35 @@ public class SeguimientoController {
             log.error("Error al exportar plan nutricional a PDF: {}", e.getMessage(), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al exportar plan nutricional a PDF", e);
+        }
+    }
+
+    /**
+     * Obtiene el dashboard de progreso del socio autenticado
+     * Usa el email del token para identificar al socio
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header) - Se extrae del token
+     * @return DTO con el dashboard de progreso del socio autenticado
+     */
+    @GetMapping("/dashboard/mi-progreso")
+    public ResponseEntity<DashboardProgresoSocioDTO> obtenerMiDashboard(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Obteniendo dashboard de progreso para socio autenticado con email: {}", userEmail);
+
+            DashboardProgresoSocioDTO dashboard = seguimientoService.obtenerMiDashboard(userRol, userEmail);
+
+            return ResponseEntity.ok(dashboard);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al obtener dashboard del socio autenticado: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener dashboard del socio autenticado", e);
         }
     }
 }

@@ -138,10 +138,51 @@ public class PerfilMedicoService {
     }
 
     /**
+     * Consulta el perfil médico del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol   Rol del usuario autenticado (debe ser SOCIO)
+     * @param userEmail Email del socio autenticado (extraído del token)
+     * @return El DTO con los datos del perfil médico del socio autenticado
+     */
+    @Transactional(readOnly = true)
+    public PerfilMedicoResponseDTO consultarMiPerfilMedico(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. Solo los socios pueden consultar su propio perfil médico.");
+        }
+
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuario(socio.getIdUsuario())
+                .orElseThrow(() -> new RuntimeException("Perfil médico no encontrado para el socio autenticado"));
+
+        PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
+        dto.setIdPerfilMedico(perfilMedico.getIdPerfilMedico());
+        dto.setIdSocio(perfilMedico.getSocio().getIdUsuario());
+        dto.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
+        dto.setPesoKg(perfilMedico.getPesoKg());
+        dto.setEstaturaCm(perfilMedico.getEstaturaCm());
+        dto.setAlergias(perfilMedico.getAlergias());
+        dto.setCondicionesCronicas(perfilMedico.getCondicionesCronicas());
+        dto.setLesionesPrevias(perfilMedico.getLesionesPrevias());
+        dto.setPorcentajeGrasa(perfilMedico.getPorcentajeGrasa());
+        dto.setFechaActualizacion(perfilMedico.getFechaActualizacion());
+
+        return dto;
+    }
+
+    /**
      * Actualiza el perfil médico de un socio.
-     * @param idSocio El ID del socio para el cual actualizar el perfil médico.
+     * 
+     * @param idSocio    El ID del socio para el cual actualizar el perfil médico.
      * @param requestDTO El DTO con los datos del perfil médico a actualizar.
-     * @param userRol El rol del usuario que realiza la operación.
+     * @param userRol    El rol del usuario que realiza la operación.
      * @return Un mensaje de éxito o error en la actualización del perfil médico.
      */
     @Transactional
@@ -176,5 +217,4 @@ public class PerfilMedicoService {
 
         return new MessegeGlobalDTO("Perfil médico actualizado correctamente");
     }
-
 }
