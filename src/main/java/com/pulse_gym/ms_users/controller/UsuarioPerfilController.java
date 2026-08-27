@@ -365,4 +365,40 @@ public class UsuarioPerfilController {
                     "Error al verificar el usuario: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * Endpoint para consultar el perfil del usuario autenticado.
+     * Usa el email del token para identificar al usuario.
+     * 
+     * @param userRol   Rol del usuario autenticado (header) - Extraído del token
+     * @param userEmail Email del usuario autenticado (header) - Extraído del token
+     * @return DTO con los datos del perfil del usuario autenticado
+     * @throws SecurityAuthorizationException Si el usuario no está autenticado
+     * @throws RuntimeException               Si no se encuentra el usuario
+     */
+    @GetMapping("/mi-perfil")
+    public ResponseEntity<UsuarioPerfilResponseDTO> consultarMiPerfil(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            if (userEmail == null || userEmail.trim().isEmpty()) {
+                throw new SecurityAuthorizationException("Usuario no autenticado");
+            }
+
+            UsuarioPerfilResponseDTO perfil = usuarioService.consultarMiPerfil(userRol, userEmail);
+            return ResponseEntity.ok(perfil);
+
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no encontrado")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar tu perfil", e);
+        }
+    }
 }
