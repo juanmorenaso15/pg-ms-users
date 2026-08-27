@@ -161,7 +161,76 @@ public class HistorialFisicoController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al obtener todos los historiales", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener todos los historiales", e);
+        }
+    }
+
+    /**
+     * Endpoint para consultar el historial físico del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header) - Extraído del token
+     * @return Lista de registros del historial físico del socio autenticado
+     * @throws SecurityAuthorizationException Si el usuario no es un socio
+     * @throws RuntimeException               Si el socio no tiene registros
+     */
+    @GetMapping("/mi-historial")
+    public ResponseEntity<List<HistorialFisicoResponseDTO>> consultarMiHistorial(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            List<HistorialFisicoResponseDTO> historial = historialService.consultarMiHistorial(userRol, userEmail);
+            return ResponseEntity.ok(historial);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("No tienes registros")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar tu historial físico", e);
+        }
+    }
+
+    /**
+     * Endpoint para obtener la evolución física del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol     Rol del usuario autenticado (header)
+     * @param userEmail   Email del usuario autenticado (header) - Extraído del
+     *                    token
+     * @param fechaInicio Fecha de inicio del período (opcional)
+     * @param fechaFin    Fecha de fin del período (opcional)
+     * @return DTO con la evolución física del socio autenticado
+     * @throws SecurityAuthorizationException Si el usuario no es un socio
+     * @throws RuntimeException               Si no se encuentra el socio
+     */
+    @GetMapping("/mi-evolucion")
+    public ResponseEntity<EvolucionFisicaDTO> obtenerMiEvolucion(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaFin) {
+        try {
+            EvolucionFisicaDTO evolucion = historialService.obtenerMiEvolucion(
+                    userRol, userEmail, fechaInicio, fechaFin);
+            return ResponseEntity.ok(evolucion);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no encontrado")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener tu evolución física", e);
         }
     }
 }

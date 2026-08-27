@@ -374,4 +374,60 @@ public class SocioMembresiaController {
         }
     }
 
+    /**
+     * Endpoint para consultar todas las membresías del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header) - Extraído del token
+     * @return Lista de membresías del socio autenticado con código HTTP 200
+     * @throws SecurityAuthorizationException Si el usuario no es un socio
+     * @throws RuntimeException               Si el socio no tiene membresías
+     */
+    @GetMapping("/mis-membresias")
+    public ResponseEntity<List<SocioMembresiaResponseDTO>> consultarMisMembresias(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            List<SocioMembresiaResponseDTO> membresias = socioMembresiaService.consultarMisMembresias(userRol,
+                    userEmail);
+            return ResponseEntity.ok(membresias);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no tienes membresías")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar tus membresías", e);
+        }
+    }
+
+    /**
+     * Endpoint para consultar la membresía activa del socio autenticado.
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return DTO con la membresía activa o null si no tiene ninguna
+     */
+    @GetMapping("/mi-membresia-activa")
+    public ResponseEntity<SocioMembresiaResponseDTO> consultarMiMembresiaActiva(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            SocioMembresiaResponseDTO membresia = socioMembresiaService.consultarMiMembresiaActiva(userRol, userEmail);
+            return ResponseEntity.ok(membresia);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar tu membresía activa", e);
+        }
+    }
 }

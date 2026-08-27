@@ -404,4 +404,105 @@ public class HistorialFisicoService {
                 .map(this::convertirAResponseDTO)
                 .collect(Collectors.toList());
     }
+
+    /**
+     * Consulta el historial físico del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol   Rol del usuario autenticado (debe ser SOCIO)
+     * @param userEmail Email del socio autenticado (extraído del token)
+     * @return Lista de registros del historial físico del socio autenticado
+     * @throws SecurityAuthorizationException Si el usuario no es un socio
+     * @throws RuntimeException               Si no se encuentra el socio o no tiene
+     *                                        registros
+     */
+    @Transactional(readOnly = true)
+    public List<HistorialFisicoResponseDTO> consultarMiHistorial(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. Solo los socios pueden consultar su propio historial físico.");
+        }
+
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        List<HistorialFisico> historial = historialRepository
+                .findBySocio_IdUsuarioOrderByFechaMedicionDesc(socio.getIdUsuario());
+
+        if (historial.isEmpty()) {
+            throw new RuntimeException("No tienes registros de historial físico");
+        }
+
+        return historial.stream()
+                .map(this::convertirAResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Obtiene la evolución física del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol     Rol del usuario autenticado (debe ser SOCIO)
+     * @param userEmail   Email del socio autenticado (extraído del token)
+     * @param fechaInicio Fecha de inicio del período (opcional)
+     * @param fechaFin    Fecha de fin del período (opcional)
+     * @return DTO con la evolución física del socio autenticado
+     * @throws SecurityAuthorizationException Si el usuario no es un socio
+     * @throws RuntimeException               Si no se encuentra el socio
+     */
+    @Transactional(readOnly = true)
+    public EvolucionFisicaDTO obtenerMiEvolucion(String userRol, String userEmail,
+            LocalDateTime fechaInicio, LocalDateTime fechaFin) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. Solo los socios pueden consultar su propia evolución física.");
+        }
+
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        if (fechaInicio == null) {
+            fechaInicio = LocalDateTime.now().minusMonths(6);
+        }
+        if (fechaFin == null) {
+            fechaFin = LocalDateTime.now();
+        }
+
+        List<HistorialFisico> historial = historialRepository
+                .findBySocio_IdUsuarioAndFechaMedicionBetweenOrderByFechaMedicionAsc(
+                        socio.getIdUsuario(), fechaInicio, fechaFin);
+
+        EvolucionFisicaDTO evolucion = new EvolucionFisicaDTO();
+        evolucion.setIdSocio(socio.getIdUsuario());
+        evolucion.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
+
+        List<EvolucionFisicaDTO.PuntoEvolucion> evolucionPeso = historial.stream()
+                .filter(h -> h.getPesoKg() != null)
+                .map(h -> new EvolucionFisicaDTO.PuntoEvolucion(h.getFechaMedicion(), h.getPesoKg()))
+                .collect(Collectors.toList());
+
+        List<EvolucionFisicaDTO.PuntoEvolucion> evolucionGrasa = historial.stream()
+                .filter(h -> h.getPorcentajeGrasa() != null)
+                .map(h -> new EvolucionFisicaDTO.PuntoEvolucion(h.getFechaMedicion(), h.getPorcentajeGrasa()))
+                .collect(Collectors.toList());
+
+        List<EvolucionFisicaDTO.PuntoEvolucion> evolucionMusculo = historial.stream()
+                .filter(h -> h.getPorcentajeMusculo() != null)
+                .map(h -> new EvolucionFisicaDTO.PuntoEvolucion(h.getFechaMedicion(), h.getPorcentajeMusculo()))
+                .collect(Collectors.toList());
+
+        evolucion.setEvolucionPeso(evolucionPeso);
+        evolucion.setEvolucionGrasa(evolucionGrasa);
+        evolucion.setEvolucionMusculo(evolucionMusculo);
+
+        return evolucion;
+    }
 }

@@ -81,6 +81,32 @@ public class PerfilMedicoController {
     }
 
     /**
+     * Endpoint para consultar el perfil médico del socio autenticado
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header) - Extraído del token
+     * @return El DTO con los datos del perfil médico del socio autenticado
+     */
+    @GetMapping("/mi-perfil-medico")
+    public ResponseEntity<PerfilMedicoResponseDTO> consultarMiPerfilMedico(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            PerfilMedicoResponseDTO perfil = perfilMedicoService.consultarMiPerfilMedico(userRol, userEmail);
+            return ResponseEntity.status(HttpStatus.OK).body(perfil);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar el perfil médico del socio autenticado", e);
+        }
+    }
+
+    /**
      * Endpoint para actualizar el perfil médico de un socio específico.
      * 
      * @param idSocio    El ID del socio para el cual actualizar el perfil médico

@@ -780,4 +780,74 @@ public class SocioMembresiaService {
                 nombre.replace(" ", "+") +
                 "&background=0F1C3F&color=fff&bold=true";
     }
+
+    /**
+     * Consulta todas las membresías del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol   Rol del usuario autenticado (debe ser SOCIO)
+     * @param userEmail Email del socio autenticado (extraído del token)
+     * @return Lista de DTOs con los datos de todas las membresías del socio
+     * @throws SecurityAuthorizationException Si el usuario no es un socio o no está
+     *                                        autorizado
+     * @throws RuntimeException               Si no se encuentra el socio o no tiene
+     *                                        membresías
+     */
+    @Transactional(readOnly = true)
+    public List<SocioMembresiaResponseDTO> consultarMisMembresias(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. Solo los socios pueden consultar sus propias membresías.");
+        }
+
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        List<SocioMembresia> membresias = socioMembresiaRepository
+                .findBySocio_IdUsuarioOrderByFechaCreacionDesc(socio.getIdUsuario());
+
+        if (membresias.isEmpty()) {
+            throw new RuntimeException("No tienes membresías asignadas");
+        }
+
+        return membresias.stream()
+                .map(this::convertirAResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Consulta la membresía activa del socio autenticado.
+     * 
+     * @param userRol   Rol del usuario autenticado (debe ser SOCIO)
+     * @param userEmail Email del socio autenticado (extraído del token)
+     * @return DTO con los datos de la membresía activa, o null si no tiene ninguna
+     */
+    @Transactional(readOnly = true)
+    public SocioMembresiaResponseDTO consultarMiMembresiaActiva(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. Solo los socios pueden consultar su membresía activa.");
+        }
+
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        SocioMembresia membresiaActiva = socioMembresiaRepository
+                .findMembresiaActivaBySocio(socio.getIdUsuario())
+                .orElse(null);
+
+        if (membresiaActiva == null) {
+            return null;
+        }
+
+        return convertirAResponseDTO(membresiaActiva);
+    }
 }
