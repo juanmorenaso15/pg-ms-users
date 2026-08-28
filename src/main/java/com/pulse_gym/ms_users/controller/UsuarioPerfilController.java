@@ -401,4 +401,42 @@ public class UsuarioPerfilController {
                     "Error al consultar tu perfil", e);
         }
     }
+
+    /**
+     * Endpoint para actualizar el perfil del usuario autenticado.
+     * Usa el email del token para identificar al usuario.
+     * 
+     * @param userRol    Rol del usuario autenticado (header) - Extraído del token
+     * @param userEmail  Email del usuario autenticado (header) - Extraído del token
+     * @param requestDTO Datos a actualizar del perfil
+     * @return Mensaje de confirmación
+     * @throws SecurityAuthorizationException Si el usuario no está autenticado
+     * @throws RuntimeException               Si no se encuentra el usuario
+     */
+    @PutMapping("/mi-perfil")
+    public ResponseEntity<MessegeGlobalDTO> actualizarMiPerfil(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @Valid @RequestBody UsuarioPerfilUpdateDTO requestDTO) {
+        try {
+            if (userEmail == null || userEmail.trim().isEmpty()) {
+                throw new SecurityAuthorizationException("Usuario no autenticado");
+            }
+
+            MessegeGlobalDTO response = usuarioService.actualizarMiPerfil(userRol, userEmail, requestDTO);
+            return ResponseEntity.ok(response);
+
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("no encontrado")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al actualizar tu perfil", e);
+        }
+    }
 }

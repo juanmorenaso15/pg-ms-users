@@ -905,12 +905,95 @@ public class UsuarioPerfilService {
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + userEmail));
 
         if (usuario.getEstado() != EnumEstadoUsuario.ACTIVO) {
-        throw new RuntimeException("El usuario no está activo");
+            throw new RuntimeException("El usuario no está activo");
         }
 
         UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
         enrichWithRol(dto, usuario);
 
         return dto;
+    }
+
+    /**
+     * Actualiza el perfil del usuario autenticado.
+     * Usa el email del token para identificar al usuario.
+     * 
+     * @param userRol    Rol del usuario autenticado
+     * @param userEmail  Email del usuario autenticado (extraído del token)
+     * @param requestDTO Datos a actualizar del perfil
+     * @return Mensaje de confirmación
+     * @throws SecurityAuthorizationException Si el usuario no está autenticado
+     * @throws RuntimeException               Si no se encuentra el usuario
+     */
+    @Transactional
+    public MessegeGlobalDTO actualizarMiPerfil(String userRol, String userEmail, UsuarioPerfilUpdateDTO requestDTO) {
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+        }
+
+        UsuarioPerfil usuario = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + userEmail));
+
+        if (usuario.getEstado() != EnumEstadoUsuario.ACTIVO) {
+            throw new RuntimeException("El usuario no está activo");
+        }
+
+        if (requestDTO.getNombre() != null) {
+            usuario.setNombre(requestDTO.getNombre());
+        }
+        if (requestDTO.getApellido() != null) {
+            usuario.setApellido(requestDTO.getApellido());
+        }
+        if (requestDTO.getSexo() != null) {
+            usuario.setSexo(requestDTO.getSexo());
+        }
+        if (requestDTO.getTelefono() != null) {
+            usuario.setTelefono(requestDTO.getTelefono());
+        }
+        if (requestDTO.getEmail() != null) {
+            if (!requestDTO.getEmail().equals(usuario.getEmail())) {
+                if (usuarioRepository.findByEmail(requestDTO.getEmail()).isPresent()) {
+                    throw new RuntimeException("El email ya está registrado por otro usuario");
+                }
+                usuario.setEmail(requestDTO.getEmail());
+            }
+        }
+        if (requestDTO.getDocumentoIdentidad() != null) {
+            if (usuarioRepository.findByDocumentoIdentidad(requestDTO.getDocumentoIdentidad())
+                    .filter(u -> !u.getIdUsuario().equals(usuario.getIdUsuario()))
+                    .isPresent()) {
+                throw new RuntimeException("El documento de identidad ya está registrado por otro usuario");
+            }
+            usuario.setDocumentoIdentidad(requestDTO.getDocumentoIdentidad());
+        }
+        if (requestDTO.getFotoUrl() != null) {
+            usuario.setFotoUrl(requestDTO.getFotoUrl());
+        }
+        if (requestDTO.getFechaNacimiento() != null) {
+            usuario.setFechaNacimiento(requestDTO.getFechaNacimiento());
+        }
+        if (requestDTO.getContactoEmergenciaNombre() != null) {
+            usuario.setContactoEmergenciaNombre(requestDTO.getContactoEmergenciaNombre());
+        }
+        if (requestDTO.getContactoEmergenciaTelefono() != null) {
+            usuario.setContactoEmergenciaTelefono(requestDTO.getContactoEmergenciaTelefono());
+        }
+        if (requestDTO.getIdSede() != null) {
+            usuario.setIdSede(requestDTO.getIdSede());
+        }
+
+        if (EnumRol.socio.name().equalsIgnoreCase(userRol)) {
+            if (requestDTO.getObjetivoPrincipal() != null) {
+                usuario.setObjetivoPrincipal(requestDTO.getObjetivoPrincipal());
+            }
+            if (requestDTO.getNivelExperiencia() != null) {
+                usuario.setNivelExperiencia(requestDTO.getNivelExperiencia());
+            }
+        }
+
+        usuarioRepository.save(usuario);
+
+        log.info("Perfil actualizado correctamente para usuario: {}", usuario.getEmail());
+        return new MessegeGlobalDTO("Perfil actualizado correctamente");
     }
 }
