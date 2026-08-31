@@ -4,16 +4,21 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pulse_gym.lb_common.dto.CalculoMembresiaFlexibleDTO;
 import com.pulse_gym.lb_common.dto.MembresiaConSociosDTO;
+import com.pulse_gym.lb_common.dto.MembresiaDashboardDTO;
 import com.pulse_gym.lb_common.dto.MembresiaFlexibleCalculadaDTO;
+import com.pulse_gym.lb_common.dto.MembresiaPorVencerDTO;
 import com.pulse_gym.lb_common.dto.MembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.MembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.SocioAsignadoDTO;
+import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.entity.user.Membresia;
 import com.pulse_gym.lb_common.entity.user.SocioMembresia;
 import com.pulse_gym.lb_common.enums.EnumTipoDuracion;
@@ -28,6 +33,11 @@ public class MembresiaService {
 
     /** El repositorio de membresías */
     private final MembresiaRepository membresiaRepository;
+
+    /** */
+    private final UsuarioPerfilService usuarioPerfilService;
+
+    private final SocioMembresiaService socioMembresiaService;
 
     /**
      * Convierte una entidad Membresia a un DTO de respuesta
@@ -494,5 +504,78 @@ public class MembresiaService {
                 .orElseThrow(() -> new RuntimeException("Membresía no encontrada con ID: " + idMembresia));
 
         return convertirAResponseDTO(membresia);
+    }
+
+    /**
+     * Consulta todas las membresías activas paginadas
+     * 
+     * @param pageable Configuración de paginación
+     * @param userRol  Rol del usuario autenticado
+     * @return Página de membresías activas
+     */
+    @Transactional(readOnly = true)
+    public Page<MembresiaResponseDTO> consultarMembresiasPaginadas(Pageable pageable, String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        Page<Membresia> paginaMembresias = membresiaRepository.findByActivoTrue(pageable);
+        return paginaMembresias.map(this::convertirAResponseDTO);
+    }
+
+    /**
+     * Consulta todas las membresías activas con sus socios asignados
+     * 
+     * @param pageable Configuración de paginación
+     * @param userRol  Rol del usuario autenticado
+     * @return Página de membresías con socios precargados
+     */
+    @Transactional(readOnly = true)
+    public Page<MembresiaConSociosDTO> consultarTodasMembresiasConSociosPaginadas(Pageable pageable, String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        Page<Membresia> pagina = membresiaRepository.findAllWithSociosAsignadosPaginado(pageable);
+        return pagina.map(this::convertirAMembresiaConSociosDTO);
+    }
+
+    /**
+     * Consulta todas las membresías activas con socios activos asignados
+     * 
+     * @param pageable Configuración de paginación
+     * @param userRol  Rol del usuario autenticado
+     * @return Página de membresías con socios activos
+     */
+    @Transactional(readOnly = true)
+    public Page<MembresiaConSociosDTO> consultarTodasMembresiasConSociosActivosPaginadas(Pageable pageable,
+            String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        Page<Membresia> pagina = membresiaRepository.findAllWithSociosActivosPaginado(pageable);
+        return pagina.map(this::convertirAMembresiaConSociosDTO);
+    }
+
+    /**
+     * Obtiene en un solo llamado los datos consolidados requeridos por el Frontend:
+     * 1. Paginación de Membresías Activas con sus socios asignados (desde la BD).
+     * 2. Lista completa de usuarios activos para asignaciones.
+     * 
+     * @param pageable Configuración de paginación (size=6 por defecto)
+     * @param userRol  Rol del usuario que realiza la petición
+     * @return MembresiaDashboardDTO unificado
+     */
+    @Transactional(readOnly = true)
+    public MembresiaDashboardDTO obtenerDashboardMembresias(Pageable pageableMembresias, Pageable pageablePorVencer,
+            String userRol) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        Page<MembresiaConSociosDTO> membresiasPaginadas = consultarTodasMembresiasConSociosActivosPaginadas(
+                pageableMembresias, userRol);
+        Page<MembresiaPorVencerDTO> porVencerPaginadas = socioMembresiaService.obtenerMembresiasPorVencerPaginadas(1, 5,
+                pageablePorVencer);
+        List<UsuarioPerfilResponseDTO> usuariosActivos = usuarioPerfilService.obtenerTodosLosUsuariosActivo(userRol);
+
+        return MembresiaDashboardDTO.builder()
+                .membresiasPaginadas(membresiasPaginadas)
+                .membresiasPorVencer(porVencerPaginadas)
+                .usuariosActivos(usuariosActivos)
+                .build();
     }
 }

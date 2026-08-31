@@ -6,6 +6,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,7 @@ import com.pulse_gym.lb_common.dto.EstadoMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.MembresiaPorVencerDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RenovarMembresiaRequestDTO;
+import com.pulse_gym.lb_common.dto.SocioAsignadoDTO;
 import com.pulse_gym.lb_common.dto.SocioMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.SocioMoraDTO;
 import com.pulse_gym.lb_common.dto.SuspenderMembresiaRequestDTO;
@@ -849,5 +852,108 @@ public class SocioMembresiaService {
         }
 
         return convertirAResponseDTO(membresiaActiva);
+    }
+
+    /**
+     * Obtiene las membresías próximas a vencer en un rango de días
+     * 
+     * @param diasMinimo Días mínimos para el rango
+     * @param diasMaximo Días máximos para el rango
+     * @param pageable   Configuración de paginación
+     * @return Página de membresías próximas a vencer
+     */
+    @Transactional(readOnly = true)
+    public Page<MembresiaPorVencerDTO> obtenerMembresiasPorVencerPaginadas(int diasMinimo, int diasMaximo,
+            Pageable pageable) {
+        LocalDate hoy = LocalDate.now();
+        LocalDate fechaInicio = hoy.plusDays(diasMinimo);
+        LocalDate fechaFin = hoy.plusDays(diasMaximo);
+
+        Page<SocioMembresia> pagina = socioMembresiaRepository
+                .findMembresiasPorVencerEnRangoPaginado(fechaInicio, fechaFin, pageable);
+
+        return pagina.map(this::convertirAPorVencerDTO);
+    }
+
+    /**
+     * Obtiene los socios asignados a una membresía paginados
+     * 
+     * @param idMembresia ID de la membresía
+     * @param pageable    Configuración de paginación
+     * @return Página de socios asignados
+     */
+    @Transactional(readOnly = true)
+    public Page<SocioAsignadoDTO> obtenerSociosAsignadosPaginados(Long idMembresia, Pageable pageable) {
+        Page<SocioMembresia> pagina = socioMembresiaRepository
+                .findSociosActivosByMembresiaId(idMembresia, pageable);
+
+        return pagina.map(this::convertirSocioMembresiaASocioAsignadoDTO);
+    }
+
+    /**
+     * Convierte una entidad SocioMembresia a SocioAsignadoDTO
+     * 
+     * @param socioMembresia Entidad a convertir
+     * @return DTO del socio asignado
+     */
+    private SocioAsignadoDTO convertirSocioMembresiaASocioAsignadoDTO(SocioMembresia socioMembresia) {
+        String nombreCompleto = socioMembresia.getSocio().getNombre();
+        if (socioMembresia.getSocio().getApellido() != null && !socioMembresia.getSocio().getApellido().isEmpty()) {
+            nombreCompleto += " " + socioMembresia.getSocio().getApellido();
+        }
+
+        Boolean esFlexible = socioMembresia.getMembresia() != null
+                && Boolean.TRUE.equals(socioMembresia.getMembresia().getEsFlexible());
+        BigDecimal precioPorDia = socioMembresia.getMembresia() != null
+                ? socioMembresia.getMembresia().getPrecioPorDia()
+                : null;
+
+        Integer cantidadDias = null;
+        if (esFlexible) {
+            if (socioMembresia.getCantidadDias() != null) {
+                cantidadDias = socioMembresia.getCantidadDias();
+            } else if (socioMembresia.getFechaInicio() != null && socioMembresia.getFechaVencimiento() != null) {
+                cantidadDias = (int) java.time.temporal.ChronoUnit.DAYS.between(
+                        socioMembresia.getFechaInicio(),
+                        socioMembresia.getFechaVencimiento());
+            }
+        }
+
+        BigDecimal precioReal = socioMembresia.getPrecioReal();
+        if (precioReal == null && socioMembresia.getMembresia() != null) {
+            if (esFlexible && precioPorDia != null && cantidadDias != null) {
+                precioReal = precioPorDia.multiply(BigDecimal.valueOf(cantidadDias));
+            } else {
+                precioReal = socioMembresia.getMembresia().getPrecioTotal();
+            }
+        }
+
+        String tipoMembresiaDescripcion = esFlexible
+                ? "Flexible - " + (cantidadDias != null ? cantidadDias : 0) + " días"
+                : (socioMembresia.getMembresia() != null ? socioMembresia.getMembresia().getDuracionDescripcion()
+                        : null);
+
+        return SocioAsignadoDTO.builder()
+                .idSocioMembresia(socioMembresia.getIdSocioMembresia())
+                .idSocio(socioMembresia.getSocio().getIdUsuario())
+                .nombreCompleto(nombreCompleto)
+                .email(socioMembresia.getSocio().getEmail())
+                .telefono(socioMembresia.getSocio().getTelefono())
+                .precioTotal(precioReal)
+                .precioReal(precioReal)
+                .esFlexible(esFlexible)
+                .precioPorDia(precioPorDia)
+                .cantidadDias(cantidadDias)
+                .tipoMembresiaDescripcion(tipoMembresiaDescripcion)
+                .fechaInicio(socioMembresia.getFechaInicio())
+                .fechaVencimiento(socioMembresia.getFechaVencimiento())
+                .estado(socioMembresia.getEstado().name())
+                .diasRestantes(socioMembresia.getDiasRestantes())
+                .estaActiva(socioMembresia.isActiva())
+                .estaVencida(socioMembresia.isVencida())
+                .observaciones(socioMembresia.getObservaciones())
+                .fechaCreacion(socioMembresia.getFechaCreacion())
+                .fechaActualizacion(socioMembresia.getFechaActualizacion())
+                .build();
     }
 }

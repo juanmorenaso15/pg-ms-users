@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -96,4 +98,41 @@ public interface SocioMembresiaRepository extends JpaRepository<SocioMembresia, 
             @Param("fechaInicio") LocalDate fechaInicio,
             @Param("fechaFin") LocalDate fechaFin);
 
+    /**
+     * Busca membresías activas próximas a vencer en un rango de fechas (paginado)
+     * 
+     * @param fechaInicio Fecha de inicio del rango
+     * @param fechaFin    Fecha de fin del rango
+     * @param pageable    Configuración de paginación
+     * @return Página de membresías próximas a vencer
+     */
+    @Query(value = "SELECT sm FROM SocioMembresia sm " +
+            "LEFT JOIN FETCH sm.socio s " +
+            "LEFT JOIN FETCH sm.membresia m " +
+            "WHERE sm.estado = 'ACTIVA' " +
+            "AND sm.fechaVencimiento BETWEEN :fechaInicio AND :fechaFin " +
+            "ORDER BY sm.fechaVencimiento ASC", countQuery = "SELECT COUNT(sm) FROM SocioMembresia sm " +
+                    "WHERE sm.estado = 'ACTIVA' " +
+                    "AND sm.fechaVencimiento BETWEEN :fechaInicio AND :fechaFin")
+    Page<SocioMembresia> findMembresiasPorVencerEnRangoPaginado(
+            @Param("fechaInicio") LocalDate fechaInicio,
+            @Param("fechaFin") LocalDate fechaFin,
+            Pageable pageable);
+
+    /**
+     * Busca socios activos asignados a una membresía específica (paginado)
+     * 
+     * @param idMembresia ID de la membresía
+     * @param pageable    Configuración de paginación
+     * @return Página de socios activos asignados
+     */
+    @Query(value = "SELECT sm FROM SocioMembresia sm " +
+            "JOIN FETCH sm.socio s " +
+            "WHERE sm.membresia.idMembresia = :idMembresia " +
+            "AND sm.estado = 'ACTIVA'", countQuery = "SELECT COUNT(sm) FROM SocioMembresia sm " +
+                    "WHERE sm.membresia.idMembresia = :idMembresia " +
+                    "AND sm.estado = 'ACTIVA'")
+    Page<SocioMembresia> findSociosActivosByMembresiaId(
+            @Param("idMembresia") Long idMembresia,
+            Pageable pageable);
 }

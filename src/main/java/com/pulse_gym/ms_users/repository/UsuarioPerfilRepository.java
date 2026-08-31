@@ -1,5 +1,6 @@
 package com.pulse_gym.ms_users.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -110,4 +111,20 @@ public interface UsuarioPerfilRepository extends JpaRepository<UsuarioPerfil, Lo
         return findEntrenadoresActivos(EnumEstadoUsuario.ACTIVO);
     }
 
+    /**
+     * Cuenta los usuarios por estado
+     * 
+     * @param estado Estado del usuario (ACTIVO, INACTIVO, SUSPENDIDO)
+     * @return Cantidad de usuarios en el estado indicado
+     */
+    long countByEstado(EnumEstadoUsuario estado);
+
+    /**
+     * Cuenta los usuarios registrados desde una fecha específica
+     * 
+     * @param fechaInicio Fecha desde la cual contar
+     * @return Cantidad de usuarios registrados desde la fecha
+     */
+    @Query("SELECT COUNT(u) FROM UsuarioPerfil u WHERE u.fechaRegistro >= :fechaInicio")
+    long countNuevosDesde(@Param("fechaInicio") LocalDateTime fechaInicio);
 }

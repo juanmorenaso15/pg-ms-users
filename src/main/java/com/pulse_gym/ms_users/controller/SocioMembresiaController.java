@@ -2,6 +2,9 @@ package com.pulse_gym.ms_users.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,6 +25,7 @@ import com.pulse_gym.lb_common.dto.EstadoMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.MembresiaPorVencerDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RenovarMembresiaRequestDTO;
+import com.pulse_gym.lb_common.dto.SocioAsignadoDTO;
 import com.pulse_gym.lb_common.dto.SocioMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.SuspenderMembresiaRequestDTO;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
@@ -429,5 +433,29 @@ public class SocioMembresiaController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al consultar tu membresía activa", e);
         }
+    }
+
+    /**
+     * Obtiene los socios asignados a una membresía específica paginados
+     * 
+     * @param idMembresia ID de la membresía
+     * @param page        Número de página
+     * @param size        Tamaño de página
+     * @param userRol     Rol del usuario autenticado (header)
+     * @return Página de socios asignados
+     */
+    @GetMapping("/membresia/{idMembresia}/socios-paginados")
+    public ResponseEntity<Page<SocioAsignadoDTO>> consultarSociosAsignadosPaginados(
+            @PathVariable Long idMembresia,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        ValidacionDeRoles.validarCualquierRol(userRol);
+        Pageable pageable = PageRequest.of(page, size);
+        Page<SocioAsignadoDTO> sociosPaginados = socioMembresiaService
+                .obtenerSociosAsignadosPaginados(idMembresia, pageable);
+
+        return ResponseEntity.ok(sociosPaginados);
     }
 }
