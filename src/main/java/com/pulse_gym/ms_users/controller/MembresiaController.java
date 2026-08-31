@@ -2,6 +2,10 @@ package com.pulse_gym.ms_users.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.pulse_gym.lb_common.dto.CalculoMembresiaFlexibleDTO;
 import com.pulse_gym.lb_common.dto.MembresiaConSociosDTO;
+import com.pulse_gym.lb_common.dto.MembresiaDashboardDTO;
 import com.pulse_gym.lb_common.dto.MembresiaFlexibleCalculadaDTO;
 import com.pulse_gym.lb_common.dto.MembresiaRequestDTO;
 import com.pulse_gym.lb_common.dto.MembresiaResponseDTO;
@@ -337,4 +342,63 @@ public class MembresiaController {
         }
     }
 
+    /**
+     * Obtiene las membresías activas paginadas
+     * 
+     * @param pageable Configuración de paginación
+     * @param userRol  Rol del usuario autenticado (header)
+     * @return Página de membresías activas
+     */
+    @GetMapping("/paginadas")
+    public ResponseEntity<Page<MembresiaResponseDTO>> obtenerMembresiasPaginadas(
+            @PageableDefault(page = 0, size = 6) Pageable pageable,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        Page<MembresiaResponseDTO> resultado = membresiaService.consultarMembresiasPaginadas(pageable, userRol);
+        return ResponseEntity.ok(resultado);
+    }
+
+    /**
+     * Obtiene las membresías activas con sus socios asignados paginadas
+     * 
+     * @param pageable Configuración de paginación
+     * @param userRol  Rol del usuario autenticado (header)
+     * @return Página de membresías con socios
+     */
+    @GetMapping("/socios/paginadas")
+    public ResponseEntity<Page<MembresiaConSociosDTO>> obtenerMembresiasConSociosPaginadas(
+            @PageableDefault(page = 0, size = 6) Pageable pageable,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        Page<MembresiaConSociosDTO> resultado = membresiaService.consultarTodasMembresiasConSociosPaginadas(pageable,
+                userRol);
+        return ResponseEntity.ok(resultado);
+    }
+
+    /**
+     * Obtiene el dashboard de membresías con listas paginadas
+     * 
+     * @param page          Página para membresías
+     * @param size          Tamaño para membresías
+     * @param pagePorVencer Página para membresías por vencer
+     * @param sizePorVencer Tamaño para membresías por vencer
+     * @param userRol       Rol del usuario autenticado (header)
+     * @return DTO con el dashboard de membresías
+     */
+    @GetMapping("/dashboard")
+    public ResponseEntity<MembresiaDashboardDTO> obtenerDashboard(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size,
+            @RequestParam(defaultValue = "0") int pagePorVencer,
+            @RequestParam(defaultValue = "6") int sizePorVencer,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        Pageable pageableMembresias = PageRequest.of(page, size);
+        Pageable pageablePorVencer = PageRequest.of(pagePorVencer, sizePorVencer);
+
+        MembresiaDashboardDTO dashboard = membresiaService.obtenerDashboardMembresias(
+                pageableMembresias, pageablePorVencer, userRol);
+
+        return ResponseEntity.ok(dashboard);
+    }
 }

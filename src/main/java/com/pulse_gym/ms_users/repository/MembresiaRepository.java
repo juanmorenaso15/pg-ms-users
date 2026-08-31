@@ -3,6 +3,8 @@ package com.pulse_gym.ms_users.repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -124,4 +126,37 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Long> {
             "AND sm.estado = 'ACTIVA' " +
             "ORDER BY m.idMembresia")
     List<Membresia> findAllWithSociosActivos();
+
+    /**
+     * Busca todas las membresías activas paginadas
+     * 
+     * @param pageable Configuración de paginación
+     * @return Página de membresías activas
+     */
+    Page<Membresia> findByActivoTrue(Pageable pageable);
+
+    /**
+     * Busca todas las membresías activas con sus socios asignados (fetch join)
+     * 
+     * @param pageable Configuración de paginación
+     * @return Página de membresías con socios precargados
+     */
+    @Query(value = "SELECT DISTINCT m FROM Membresia m " +
+            "LEFT JOIN FETCH m.socioMembresias sm " +
+            "LEFT JOIN FETCH sm.socio s " +
+            "WHERE m.activo = true", countQuery = "SELECT COUNT(m) FROM Membresia m WHERE m.activo = true")
+    Page<Membresia> findAllWithSociosAsignadosPaginado(Pageable pageable);
+
+    /**
+     * Busca todas las membresías activas con socios activos asignados
+     * 
+     * @param pageable Configuración de paginación
+     * @return Página de membresías con socios activos
+     */
+    @Query(value = "SELECT DISTINCT m FROM Membresia m " +
+            "LEFT JOIN FETCH m.socioMembresias sm " +
+            "LEFT JOIN FETCH sm.socio s " +
+            "WHERE m.activo = true AND (sm IS NULL OR sm.estado = 'ACTIVA')", countQuery = "SELECT COUNT(m) FROM Membresia m WHERE m.activo = true")
+    Page<Membresia> findAllWithSociosActivosPaginado(Pageable pageable);
+
 }
