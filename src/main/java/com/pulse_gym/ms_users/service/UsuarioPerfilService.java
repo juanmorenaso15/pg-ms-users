@@ -16,7 +16,10 @@ import com.pulse_gym.lb_common.dto.AuthUserDTO;
 import com.pulse_gym.lb_common.dto.CompletarPerfilRequestDTO;
 import com.pulse_gym.lb_common.dto.EnvioEventoNotificacionDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
+import com.pulse_gym.lb_common.dto.RegistroCompletoSocioRequestDTO;
+import com.pulse_gym.lb_common.dto.RegistroCompletoSocioResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistroHuellaRequestDTO;
+import com.pulse_gym.lb_common.dto.SocioMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilUpdateDTO;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
@@ -26,6 +29,7 @@ import com.pulse_gym.lb_common.enums.EnumNivelExperiencia;
 import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
+import com.pulse_gym.ms_users.repository.SocioMembresiaRepository;
 import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -47,6 +51,9 @@ public class UsuarioPerfilService {
 
     /** Repositorio para operaciones de base de datos de usuarios */
     private final UsuarioPerfilRepository usuarioRepository;
+
+    private final SocioMembresiaService socioMembresiaService;
+    private final SocioMembresiaRepository socioMembresiaRepository;
 
     /**
      * Convierte una entidad UsuarioPerfil a UsuarioPerfilResponseDTO
@@ -995,5 +1002,78 @@ public class UsuarioPerfilService {
 
         log.info("Perfil actualizado correctamente para usuario: {}", usuario.getEmail());
         return new MessegeGlobalDTO("Perfil actualizado correctamente");
+    }
+
+    /**
+     * Registra un socio completo en una sola operación (perfil, membresía y huella)
+     * 
+     * @param request           Datos del socio a registrar
+     * @param userRol           Rol del usuario autenticado
+     * @param userEmail         Email del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @return DTO con los datos del registro completo
+     */
+    @Transactional
+    public RegistroCompletoSocioResponseDTO registrarSocioCompleto(
+            RegistroCompletoSocioRequestDTO request,
+            String userRol,
+            String userEmail,
+            Long userIdAutenticado) {
+
+        completarPerfil(request.getPerfil(), userRol, userEmail);
+
+        String emailObjetivo = EnumRol.socio.name().equals(userRol) ? userEmail : request.getPerfil().getEmail();
+        UsuarioPerfil usuarioPerfil = usuarioRepository.findByEmail(emailObjetivo)
+                .orElseThrow(() -> new RuntimeException("Error al recuperar el perfil creado"));
+
+        if (request.getAsignacionMembresia() != null) {
+            request.getAsignacionMembresia().setIdSocio(usuarioPerfil.getIdUsuario());
+            socioMembresiaService.asignarMembresia(request.getAsignacionMembresia(), userRol);
+        } else if (request.getAsignacionMembresiaFlexible() != null) {
+            request.getAsignacionMembresiaFlexible().setIdSocio(usuarioPerfil.getIdUsuario());
+            socioMembresiaService.asignarMembresiaFlexible(request.getAsignacionMembresiaFlexible(), userRol);
+        }
+
+        boolean huellaRegistrada = false;
+        if (request.getBiometricDeviceId() != null && !request.getBiometricDeviceId().trim().isEmpty()) {
+            RegistroHuellaRequestDTO huellaDTO = new RegistroHuellaRequestDTO();
+            huellaDTO.setDeviceId(request.getBiometricDeviceId());
+            registrarHuella(usuarioPerfil.getIdUsuario(), huellaDTO, userRol, userIdAutenticado);
+            huellaRegistrada = true;
+        }
+
+        UsuarioPerfilResponseDTO perfilDTO = convertirADTO(usuarioPerfil);
+        enrichWithRol(perfilDTO, usuarioPerfil);
+
+        SocioMembresiaResponseDTO membresiaDTO = socioMembresiaRepository
+                .findMembresiaActivaBySocio(usuarioPerfil.getIdUsuario())
+                .map(this::convertirAResponseDTODesdeSocioMembresia)
+                .orElse(null);
+
+        return RegistroCompletoSocioResponseDTO.builder()
+                .mensaje("Registro de socio completado exitosamente en una sola operación")
+                .perfil(perfilDTO)
+                .membresia(membresiaDTO)
+                .huellaRegistrada(huellaRegistrada)
+                .build();
+    }
+
+    private SocioMembresiaResponseDTO convertirAResponseDTODesdeSocioMembresia(
+            com.pulse_gym.lb_common.entity.user.SocioMembresia sm) {
+        SocioMembresiaResponseDTO dto = new SocioMembresiaResponseDTO();
+        dto.setIdSocioMembresia(sm.getIdSocioMembresia());
+        dto.setIdSocio(sm.getSocio().getIdUsuario());
+        dto.setNombreSocio(sm.getSocio().getNombre() + " " + sm.getSocio().getApellido());
+        dto.setEmailSocio(sm.getSocio().getEmail());
+        dto.setIdMembresia(sm.getMembresia().getIdMembresia());
+        dto.setNombreMembresia(sm.getMembresia().getNombre());
+        dto.setPrecioTotal(sm.getMembresia().getPrecioTotal());
+        dto.setFechaInicio(sm.getFechaInicio());
+        dto.setFechaVencimiento(sm.getFechaVencimiento());
+        dto.setEstado(sm.getEstado().name());
+        dto.setDiasRestantes(sm.getDiasRestantes());
+        dto.setEstaActiva(sm.isActiva());
+        dto.setEstaVencida(sm.isVencida());
+        return dto;
     }
 }
