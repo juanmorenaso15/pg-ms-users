@@ -223,7 +223,7 @@ public class PlanNutricionalService {
             plan.setPlanGenerado(respuestaIA.toString());
         }
 
-        plan.setModeloIa("llama-3.3-70b-versatile");
+        plan.setModeloIa("groq/compound");
         plan.setVersion(1);
         plan.setActivo(true);
 
