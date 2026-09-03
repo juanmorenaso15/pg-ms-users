@@ -433,6 +433,8 @@ public class MembresiaService {
             nombreCompleto += " " + socioMembresia.getSocio().getApellido();
         }
 
+        String fotoUrlSocio = socioMembresia.getSocio().getFotoUrl();
+
         Boolean esFlexible = socioMembresia.getMembresia() != null
                 && Boolean.TRUE.equals(socioMembresia.getMembresia().getEsFlexible());
         BigDecimal precioPorDia = socioMembresia.getMembresia() != null
@@ -470,6 +472,7 @@ public class MembresiaService {
                 .nombreCompleto(nombreCompleto)
                 .email(socioMembresia.getSocio().getEmail())
                 .telefono(socioMembresia.getSocio().getTelefono())
+                .fotoUrl(socioMembresia.getSocio().getFotoUrl())
                 .precioTotal(precioReal)
                 .precioReal(precioReal)
                 .esFlexible(esFlexible)

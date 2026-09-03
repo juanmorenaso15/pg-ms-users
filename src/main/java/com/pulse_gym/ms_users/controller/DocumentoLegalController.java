@@ -2,6 +2,7 @@ package com.pulse_gym.ms_users.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -11,12 +12,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.pulse_gym.lb_common.dto.DocumentoLegalRequestDTO;
 import com.pulse_gym.lb_common.dto.DocumentoLegalResponseDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
+import com.pulse_gym.lb_common.enums.EnumEstadoDocumentoLegal;
+import com.pulse_gym.lb_common.enums.EnumTipoDocumentoLegal;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.service.DocumentoLegalService;
 
@@ -55,28 +59,6 @@ public class DocumentoLegalController {
         } catch (Exception e) {
             e.printStackTrace();
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        }
-    }
-
-    /**
-     * Consulta todos los documentos legales vigentes.
-     * 
-     * @param userRol El rol del usuario que realiza la consulta
-     * @return Una lista de documentos legales vigentes
-     */
-    @GetMapping()
-    public ResponseEntity<List<DocumentoLegalResponseDTO>> consultarTodosLosDocumentosLegales(
-            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
-        try {
-            List<DocumentoLegalResponseDTO> documentos = documentoLegalService
-                    .consultarTodosLosDocumentosLegales(userRol);
-            return ResponseEntity.status(HttpStatus.OK).body(documentos);
-        } catch (SecurityAuthorizationException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al consultar documentos", e);
         }
     }
 
@@ -161,6 +143,39 @@ public class DocumentoLegalController {
             throw e;
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al verificar consentimiento", e);
+        }
+    }
+
+    /**
+     * Consulta todos los documentos legales con filtros y paginación
+     * 
+     * @param search        Búsqueda por texto en nombre o descripción
+     * @param tipoDocumento Filtro por tipo de documento
+     * @param estado        Filtro por estado del documento
+     * @param page          Número de página
+     * @param size          Tamaño de página
+     * @param userRol       Rol del usuario autenticado (header)
+     * @return Página de documentos legales
+     */
+    @GetMapping()
+    public ResponseEntity<Page<DocumentoLegalResponseDTO>> consultarTodosLosDocumentosLegales(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) EnumTipoDocumentoLegal tipoDocumento,
+            @RequestParam(required = false) EnumEstadoDocumentoLegal estado,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            Page<DocumentoLegalResponseDTO> documentos = documentoLegalService
+                    .consultarDocumentosPaginados(search, tipoDocumento, estado, page, size, userRol);
+            return ResponseEntity.status(HttpStatus.OK).body(documentos);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al consultar documentos paginados", e);
         }
     }
 }

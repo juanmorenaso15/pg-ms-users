@@ -956,4 +956,33 @@ public class SocioMembresiaService {
                 .fechaActualizacion(socioMembresia.getFechaActualizacion())
                 .build();
     }
+
+    /**
+     * Obtiene socios activos con filtros y paginación
+     * 
+     * @param pageable    Configuración de paginación
+     * @param busqueda    Búsqueda por nombre, apellido o email
+     * @param incluyeIA   Filtro por membresía con IA incluida
+     * @param esFlexible  Filtro por membresía flexible
+     * @param idMembresia Filtro por ID de membresía
+     * @return Página de socios activos
+     */
+    @Transactional(readOnly = true)
+    public Page<SocioAsignadoDTO> obtenerSociosActivosPaginadosConFiltros(
+            Pageable pageable,
+            String busqueda,
+            Boolean incluyeIA,
+            Boolean esFlexible,
+            Long idMembresia) {
+
+        Page<SocioMembresia> pagina = socioMembresiaRepository.findSociosActivosConFiltros(
+                pageable,
+                busqueda,
+                incluyeIA,
+                esFlexible,
+                idMembresia
+        );
+
+        return pagina.map(this::convertirSocioMembresiaASocioAsignadoDTO);
+    }
 }

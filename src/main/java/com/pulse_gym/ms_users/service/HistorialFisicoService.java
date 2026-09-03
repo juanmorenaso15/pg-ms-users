@@ -8,6 +8,8 @@ import java.time.Period;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -504,5 +506,32 @@ public class HistorialFisicoService {
         evolucion.setEvolucionMusculo(evolucionMusculo);
 
         return evolucion;
+    }
+
+    /**
+     * Obtiene historiales físicos con filtros y paginación
+     * 
+     * @param userRol     Rol del usuario autenticado
+     * @param idSocio     Filtro por ID del socio
+     * @param fechaInicio Fecha de inicio del rango
+     * @param fechaFin    Fecha de fin del rango
+     * @param busqueda    Búsqueda por nombre o apellido
+     * @param pageable    Configuración de paginación
+     * @return Página de historiales físicos
+     */
+    @Transactional(readOnly = true)
+    public Page<HistorialFisicoResponseDTO> obtenerHistorialesPaginados(
+            String userRol, Long idSocio, LocalDateTime fechaInicio, LocalDateTime fechaFin, String busqueda,
+            Pageable pageable) {
+
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        // Enviar solo el texto limpio (o null si está vacío)
+        String busquedaParam = (busqueda == null || busqueda.trim().isEmpty()) ? null : busqueda.trim();
+
+        Page<HistorialFisico> paginaHistorial = historialRepository.findWithFilters(
+                idSocio, fechaInicio, fechaFin, busquedaParam, pageable);
+
+        return paginaHistorial.map(this::convertirAResponseDTO);
     }
 }

@@ -402,7 +402,7 @@ public class RutinaService {
         rutina.setNivel(socio.getNivelExperiencia().name());
         rutina.setCondiciones("Días por semana: " + request.getDiasPorSemana() +
                 ", Duración: " + request.getDuracionSemanas() + " semanas");
-        rutina.setModeloIa("llama-3.3-70b-versatile");
+        rutina.setModeloIa("groq/compound");
         rutina.setVersion(1);
         rutina.setActiva(true);
         rutina.setExplicacionIa(respuestaIA.getExplicacionIA());

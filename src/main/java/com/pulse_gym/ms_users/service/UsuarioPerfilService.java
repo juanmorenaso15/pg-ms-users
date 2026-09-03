@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -1075,5 +1077,41 @@ public class UsuarioPerfilService {
         dto.setEstaActiva(sm.isActiva());
         dto.setEstaVencida(sm.isVencida());
         return dto;
+    }
+
+    /**
+     * Obtiene usuarios con paginación, filtro por estado y búsqueda
+     * 
+     * @param estado   Estado del usuario (ACTIVO, INACTIVO, null = todos)
+     * @param busqueda Texto de búsqueda (opcional)
+     * @param pageable Configuración de paginación
+     * @param userRol  Rol del usuario autenticado
+     * @return Página de usuarios
+     */
+    @Transactional(readOnly = true)
+    public Page<UsuarioPerfilResponseDTO> obtenerUsuariosPaginados(
+            EnumEstadoUsuario estado,
+            String busqueda,
+            Pageable pageable,
+            String userRol) {
+
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        String busquedaLimpia = (busqueda != null && !busqueda.trim().isEmpty())
+                ? busqueda.trim()
+                : null;
+
+        String estadoStr = estado != null ? estado.name() : null;
+
+        Page<UsuarioPerfil> pagina = usuarioRepository.findUsuariosConFiltros(
+                estadoStr,
+                busquedaLimpia,
+                pageable);
+
+        return pagina.map(usuario -> {
+            UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
+            enrichWithRol(dto, usuario);
+            return dto;
+        });
     }
 }
