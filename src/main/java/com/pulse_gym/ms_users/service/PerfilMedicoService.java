@@ -1,5 +1,7 @@
 package com.pulse_gym.ms_users.service;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,24 +26,25 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PerfilMedicoService {
 
-    /** Repositorio para acceder a los perfiles médicos */
+    /** Repositorio de perfiles médicos */
     private final PerfilMedicoRepository perfilMedicoRepository;
 
-    /** Repositorio para acceder a los perfiles de usuario */
+    /** Repositorio de usuarios */
     private final UsuarioPerfilRepository usuarioRepository;
 
-    /** Repositorio para acceder a los documentos legales */
+    /** Repositorio de documentos legales */
     private final DocumentoLegalRepository documentoLegalRepository;
 
-    /** Cliente para acceder al servicio de autenticación */
+    /** Cliente Feign para consultar el servicio de autenticación */
     private final AuthServiceClient authServiceClient;
 
     /**
-     * Valida que el socio tenga un consentimiento informado vigente antes de
-     * permitir la gestión del perfil médico.
+     * Valida que el socio tenga un consentimiento informado vigente
      * 
-     * @param idSocio El ID del socio para el cual se va a gestionar el perfil
-     *                médico
+     * @param idSocio ID del socio a validar
+     * @throws RuntimeException               Si el socio no existe
+     * @throws SecurityAuthorizationException Si no tiene consentimiento informado
+     *                                        vigente
      */
     private void validarConsentimientoInformado(Long idSocio) {
         UsuarioPerfil socio = usuarioRepository.findById(idSocio)
@@ -65,22 +68,36 @@ public class PerfilMedicoService {
     }
 
     /**
-     * Registra un nuevo perfil médico para un socio.
-     *
-     * @param requestDTO El DTO que contiene los datos del perfil médico a
-     *                   registrar.
-     * @param userRol    El rol del usuario que realiza la operación (debe ser admin
-     *                   o recepcionista).
-     * @return Un mensaje indicando el resultado de la operación.
+     * Registra un nuevo perfil médico para un socio
+     * 
+     * @param requestDTO Datos del perfil médico
+     * @param userRol    Rol del usuario autenticado
+     * @param userEmail  Email del usuario autenticado
+     * @return Mensaje de confirmación
+     * @throws SecurityAuthorizationException Si el usuario no tiene permisos o
+     *                                        falta consentimiento
      */
     @Transactional
-    public MessegeGlobalDTO registrarPerfilMedico(PerfilMedicoRequestDTO requestDTO, String userRol) {
-        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+    public MessegeGlobalDTO registrarPerfilMedico(PerfilMedicoRequestDTO requestDTO, String userRol, String userEmail) {
+        if (EnumRol.socio.name().equals(userRol)) {
+            if (userEmail == null || userEmail.trim().isEmpty()) {
+                throw new SecurityAuthorizationException("Email de usuario no proporcionado en el token");
+            }
+            UsuarioPerfil socioToken = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado"));
+
+            if (!socioToken.getIdUsuario().equals(requestDTO.getIdSocio())) {
+                throw new SecurityAuthorizationException(
+                        "No tienes permisos para crear el perfil médico de otro usuario.");
+            }
+        } else {
+            ValidacionDeRoles.validarAdminORecepcionista(userRol);
+        }
 
         validarConsentimientoInformado(requestDTO.getIdSocio());
 
-        if (perfilMedicoRepository.existsBySocio_IdUsuario(requestDTO.getIdSocio())) {
-            throw new RuntimeException("El socio ya tiene un perfil médico registrado");
+        if (perfilMedicoRepository.existsBySocio_IdUsuarioAndActivoTrue(requestDTO.getIdSocio())) {
+            throw new RuntimeException("El socio ya tiene un perfil médico activo registrado");
         }
 
         UsuarioPerfil socio = usuarioRepository.findById(requestDTO.getIdSocio())
@@ -94,37 +111,68 @@ public class PerfilMedicoService {
         perfilMedico.setCondicionesCronicas(requestDTO.getCondicionesCronicas());
         perfilMedico.setLesionesPrevias(requestDTO.getLesionesPrevias());
         perfilMedico.setPorcentajeGrasa(requestDTO.getPorcentajeGrasa());
+        perfilMedico.setActivo(true);
 
         perfilMedicoRepository.save(perfilMedico);
         return new MessegeGlobalDTO("Perfil médico registrado correctamente");
     }
 
     /**
-     * Consulta el perfil médico de un socio.
-     *
-     * @param idSocio El ID del socio para el cual consultar el perfil médico.
-     * @param userRol El rol del usuario que realiza la operación.
-     * @return El DTO con los datos del perfil médico consultado.
+     * Consulta perfiles médicos con búsqueda y paginación
+     * 
+     * @param busqueda Búsqueda por nombre, apellido o documento del socio
+     * @param pageable Configuración de paginación
+     * @param userRol  Rol del usuario autenticado
+     * @return Página de perfiles médicos
      */
     @Transactional(readOnly = true)
-    public PerfilMedicoResponseDTO consultarPerfilMedico(Long idSocio, String userRol) {
+    public Page<PerfilMedicoResponseDTO> consultarPerfilesMedicosPaginados(String busqueda, Pageable pageable,
+            String userRol) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
-        if (userRol.equals(EnumRol.socio.name())) {
-            throw new SecurityAuthorizationException(
-                    "Acceso denegado. Los socios no pueden ver su propio perfil médico por razones de seguridad.");
+        Page<PerfilMedico> perfilesPage = perfilMedicoRepository.consultarPerfilesMedicosPaginados(busqueda, pageable);
+
+        return perfilesPage.map(perfil -> {
+            PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
+            dto.setIdPerfilMedico(perfil.getIdPerfilMedico());
+            dto.setIdSocio(perfil.getSocio().getIdUsuario());
+            dto.setNombreSocio(perfil.getSocio().getNombre() + " " + perfil.getSocio().getApellido());
+            dto.setPesoKg(perfil.getPesoKg());
+            dto.setEstaturaCm(perfil.getEstaturaCm());
+            dto.setAlergias(perfil.getAlergias());
+            dto.setCondicionesCronicas(perfil.getCondicionesCronicas());
+            dto.setLesionesPrevias(perfil.getLesionesPrevias());
+            dto.setPorcentajeGrasa(perfil.getPorcentajeGrasa());
+            dto.setFechaActualizacion(perfil.getFechaActualizacion());
+            return dto;
+        });
+    }
+
+    /**
+     * Consulta el perfil médico de un socio
+     * 
+     * @param idSocio   ID del socio
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return DTO del perfil médico
+     */
+    @Transactional(readOnly = true)
+    public PerfilMedicoResponseDTO consultarPerfilMedico(Long idSocio, String userRol, String userEmail) {
+        if (EnumRol.socio.name().equals(userRol)) {
+            return consultarMiPerfilMedico(userRol, userEmail);
         }
 
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
-        UsuarioPerfil socio = usuarioRepository.findById(idSocio)
-                .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + idSocio));
+        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuarioAndActivoTrue(idSocio)
+                .orElseThrow(
+                        () -> new RuntimeException("Perfil médico activo no encontrado para el socio: " + idSocio));
 
-        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuario(idSocio)
-                .orElseThrow(() -> new RuntimeException("Perfil médico no encontrado para el socio: " + idSocio));
+        UsuarioPerfil socio = perfilMedico.getSocio();
 
         PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
         dto.setIdPerfilMedico(perfilMedico.getIdPerfilMedico());
-        dto.setIdSocio(perfilMedico.getSocio().getIdUsuario());
+        dto.setIdSocio(socio.getIdUsuario());
         dto.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
         dto.setPesoKg(perfilMedico.getPesoKg());
         dto.setEstaturaCm(perfilMedico.getEstaturaCm());
@@ -138,33 +186,32 @@ public class PerfilMedicoService {
     }
 
     /**
-     * Consulta el perfil médico del socio autenticado.
-     * Usa el email del token para identificar al socio.
+     * Consulta el perfil médico del socio autenticado
      * 
-     * @param userRol   Rol del usuario autenticado (debe ser SOCIO)
-     * @param userEmail Email del socio autenticado (extraído del token)
-     * @return El DTO con los datos del perfil médico del socio autenticado
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return DTO del perfil médico
      */
     @Transactional(readOnly = true)
     public PerfilMedicoResponseDTO consultarMiPerfilMedico(String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             throw new SecurityAuthorizationException(
-                    "Acceso denegado. Solo los socios pueden consultar su propio perfil médico.");
+                    "Acceso denegado. Solo los socios pueden consultar su propio perfil médico por esta vía.");
         }
 
         if (userEmail == null || userEmail.trim().isEmpty()) {
-            throw new SecurityAuthorizationException("Email de usuario no proporcionado");
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado en el token");
         }
 
         UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
 
-        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuario(socio.getIdUsuario())
+        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuarioAndActivoTrue(socio.getIdUsuario())
                 .orElseThrow(() -> new RuntimeException("Perfil médico no encontrado para el socio autenticado"));
 
         PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
         dto.setIdPerfilMedico(perfilMedico.getIdPerfilMedico());
-        dto.setIdSocio(perfilMedico.getSocio().getIdUsuario());
+        dto.setIdSocio(socio.getIdUsuario());
         dto.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
         dto.setPesoKg(perfilMedico.getPesoKg());
         dto.setEstaturaCm(perfilMedico.getEstaturaCm());
@@ -178,21 +225,35 @@ public class PerfilMedicoService {
     }
 
     /**
-     * Actualiza el perfil médico de un socio.
+     * Actualiza el perfil médico de un socio
      * 
-     * @param idSocio    El ID del socio para el cual actualizar el perfil médico.
-     * @param requestDTO El DTO con los datos del perfil médico a actualizar.
-     * @param userRol    El rol del usuario que realiza la operación.
-     * @return Un mensaje de éxito o error en la actualización del perfil médico.
+     * @param idSocio    ID del socio
+     * @param requestDTO Datos a actualizar
+     * @param userRol    Rol del usuario autenticado
+     * @param userEmail  Email del usuario autenticado
+     * @return Mensaje de confirmación
      */
     @Transactional
-    public MessegeGlobalDTO actualizarPerfilMedico(Long idSocio, PerfilMedicoRequestDTO requestDTO, String userRol) {
-        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+    public MessegeGlobalDTO actualizarPerfilMedico(Long idSocio, PerfilMedicoRequestDTO requestDTO, String userRol,
+            String userEmail) {
+        if (EnumRol.socio.name().equals(userRol)) {
+            if (userEmail == null || userEmail.trim().isEmpty()) {
+                throw new SecurityAuthorizationException("Email de usuario no proporcionado en el token");
+            }
+            UsuarioPerfil socioToken = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado"));
+            if (!socioToken.getIdUsuario().equals(idSocio)) {
+                throw new SecurityAuthorizationException(
+                        "No tienes permisos para actualizar el perfil médico de otro usuario.");
+            }
+        } else {
+            ValidacionDeRoles.validarAdminORecepcionista(userRol);
+            validarConsentimientoInformado(idSocio);
+        }
 
-        validarConsentimientoInformado(idSocio);
-
-        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuario(idSocio)
-                .orElseThrow(() -> new RuntimeException("Perfil médico no encontrado para el socio: " + idSocio));
+        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuarioAndActivoTrue(idSocio)
+                .orElseThrow(
+                        () -> new RuntimeException("Perfil médico activo no encontrado para el socio: " + idSocio));
 
         if (requestDTO.getPesoKg() != null) {
             perfilMedico.setPesoKg(requestDTO.getPesoKg());
@@ -216,5 +277,76 @@ public class PerfilMedicoService {
         perfilMedicoRepository.save(perfilMedico);
 
         return new MessegeGlobalDTO("Perfil médico actualizado correctamente");
+    }
+
+    /**
+     * Actualiza el perfil médico del socio autenticado basándose en su token
+     * 
+     * @param requestDTO Datos a actualizar
+     * @param userRol    Rol del usuario autenticado
+     * @param userEmail  Email del usuario autenticado
+     * @return Mensaje de confirmación
+     */
+    @Transactional
+    public MessegeGlobalDTO actualizarMiPerfilMedico(PerfilMedicoRequestDTO requestDTO, String userRol,
+            String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. Solo los socios pueden actualizar su propio perfil médico por esta vía.");
+        }
+
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new SecurityAuthorizationException("Email de usuario no proporcionado en el token");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuarioAndActivoTrue(socio.getIdUsuario())
+                .orElseThrow(() -> new RuntimeException("Perfil médico no encontrado para el socio autenticado"));
+
+        if (requestDTO.getPesoKg() != null) {
+            perfilMedico.setPesoKg(requestDTO.getPesoKg());
+        }
+        if (requestDTO.getEstaturaCm() != null) {
+            perfilMedico.setEstaturaCm(requestDTO.getEstaturaCm());
+        }
+        if (requestDTO.getAlergias() != null) {
+            perfilMedico.setAlergias(requestDTO.getAlergias());
+        }
+        if (requestDTO.getCondicionesCronicas() != null) {
+            perfilMedico.setCondicionesCronicas(requestDTO.getCondicionesCronicas());
+        }
+        if (requestDTO.getLesionesPrevias() != null) {
+            perfilMedico.setLesionesPrevias(requestDTO.getLesionesPrevias());
+        }
+        if (requestDTO.getPorcentajeGrasa() != null) {
+            perfilMedico.setPorcentajeGrasa(requestDTO.getPorcentajeGrasa());
+        }
+
+        perfilMedicoRepository.save(perfilMedico);
+
+        return new MessegeGlobalDTO("Perfil médico actualizado correctamente");
+    }
+
+    /**
+     * Elimina (desactiva) el perfil médico de un socio
+     * 
+     * @param idSocio ID del socio
+     * @param userRol Rol del usuario autenticado
+     * @return Mensaje de confirmación
+     */
+    @Transactional
+    public MessegeGlobalDTO eliminarPerfilMedico(Long idSocio, String userRol) {
+        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+
+        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuarioAndActivoTrue(idSocio)
+                .orElseThrow(
+                        () -> new RuntimeException("Perfil médico activo no encontrado para el socio: " + idSocio));
+
+        perfilMedico.setActivo(false);
+        perfilMedicoRepository.save(perfilMedico);
+
+        return new MessegeGlobalDTO("Perfil médico eliminado correctamente");
     }
 }
