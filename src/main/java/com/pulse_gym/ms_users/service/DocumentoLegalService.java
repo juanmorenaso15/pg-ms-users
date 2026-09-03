@@ -3,6 +3,9 @@ package com.pulse_gym.ms_users.service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,7 +61,6 @@ public class DocumentoLegalService {
             throw new RuntimeException("No se pudo verificar el rol del usuario");
         }
 
-    
         DocumentoLegal documento = new DocumentoLegal();
         documento.setUsuario(usuario);
         documento.setTipoDocumento(requestDTO.getTipoDocumento());
@@ -191,5 +193,45 @@ public class DocumentoLegalService {
                 .findDocumentoPorTipo(idUsuario, EnumTipoDocumentoLegal.CONSENTIEMIENTO_INFORMADO,
                         EnumEstadoDocumentoLegal.VIGENTE)
                 .isPresent();
+    }
+
+    /**
+     * Consulta documentos legales con filtros y paginación
+     * 
+     * @param search        Búsqueda por nombre o apellido del usuario
+     * @param tipoDocumento Filtro por tipo de documento
+     * @param estado        Filtro por estado del documento
+     * @param pagina        Número de página
+     * @param tamanio       Tamaño de página
+     * @param userRol       Rol del usuario autenticado
+     * @return Página de documentos legales
+     */
+    @Transactional(readOnly = true)
+    public Page<DocumentoLegalResponseDTO> consultarDocumentosPaginados(
+            String search,
+            EnumTipoDocumentoLegal tipoDocumento,
+            EnumEstadoDocumentoLegal estado,
+            int pagina,
+            int tamanio,
+            String userRol) {
+
+        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+
+        Pageable pageable = PageRequest.of(pagina, tamanio);
+
+        Page<DocumentoLegal> documentosPage = documentoLegalRepository
+                .consultarDocumentosPaginadosFiltros(estado, tipoDocumento, search, pageable);
+
+        return documentosPage.map(doc -> {
+            DocumentoLegalResponseDTO dto = new DocumentoLegalResponseDTO();
+            dto.setIdDocumento(doc.getIdDocumento());
+            dto.setIdUsuario(doc.getUsuario().getIdUsuario());
+            dto.setNombreUsuario(doc.getUsuario().getNombre() + " " + doc.getUsuario().getApellido());
+            dto.setTipoDocumento(doc.getTipoDocumento());
+            dto.setFechaFirma(doc.getFechaFirma());
+            dto.setUrlArchivoFirmado(doc.getUrlArchivoFirmado());
+            dto.setEstado(doc.getEstado());
+            return dto;
+        });
     }
 }

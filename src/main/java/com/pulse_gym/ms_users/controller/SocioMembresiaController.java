@@ -458,4 +458,36 @@ public class SocioMembresiaController {
 
         return ResponseEntity.ok(sociosPaginados);
     }
+
+    /**
+     * Obtiene socios activos con filtros y paginación
+     * 
+     * @param page        Número de página
+     * @param size        Tamaño de página
+     * @param busqueda    Búsqueda por nombre o email
+     * @param incluyeIA   Filtro por rutina IA asociada
+     * @param esFlexible  Filtro por membresía flexible
+     * @param idMembresia Filtro por ID de membresía
+     * @param userRol     Rol del usuario autenticado (header)
+     * @return Página de socios activos
+     */
+    @GetMapping("/socios-activos-paginados")
+    public ResponseEntity<Page<SocioAsignadoDTO>> obtenerSociosActivosPaginados(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size,
+            @RequestParam(required = false) String busqueda,
+            @RequestParam(required = false) Boolean incluyeIA,
+            @RequestParam(required = false) Boolean esFlexible,
+            @RequestParam(required = false) Long idMembresia,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+
+        ValidacionDeRoles.validarCualquierRol(userRol);
+        Pageable pageable = PageRequest.of(page, size);
+
+        Page<SocioAsignadoDTO> resultado = socioMembresiaService
+                .obtenerSociosActivosPaginadosConFiltros(
+                        pageable, busqueda, incluyeIA, esFlexible, idMembresia);
+
+        return ResponseEntity.ok(resultado);
+    }
 }

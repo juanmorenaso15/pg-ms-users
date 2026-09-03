@@ -135,4 +135,61 @@ public interface SocioMembresiaRepository extends JpaRepository<SocioMembresia, 
     Page<SocioMembresia> findSociosActivosByMembresiaId(
             @Param("idMembresia") Long idMembresia,
             Pageable pageable);
+
+    /**
+     * Busca socios activos con filtros y paginación
+     * 
+     * @param pageable    Configuración de paginación
+     * @param busqueda    Búsqueda por nombre, apellido o email
+     * @param incluyeIA   Filtro por membresía con IA incluida
+     * @param esFlexible  Filtro por membresía flexible
+     * @param idMembresia Filtro por ID de membresía
+     * @return Página de socios activos
+     */
+    @Query(value = "SELECT DISTINCT sm.* FROM socio_membresia sm " +
+            "JOIN usuario_perfil s ON s.id_usuario = sm.fk_id_socio " +
+            "JOIN membresias m ON m.id_membresia = sm.fk_id_membresia " +
+            "WHERE sm.estado = 'ACTIVA' " +
+            "AND (:busqueda IS NULL OR s.nombre ILIKE CONCAT('%', :busqueda, '%') " +
+            "     OR s.apellido ILIKE CONCAT('%', :busqueda, '%') " +
+            "     OR s.email ILIKE CONCAT('%', :busqueda, '%')) " +
+            "AND (:incluyeIA IS NULL OR m.incluye_ia = :incluyeIA) " +
+            "AND (:esFlexible IS NULL OR m.es_flexible = :esFlexible) " +
+            "AND (:idMembresia IS NULL OR m.id_membresia = :idMembresia) " +
+            "ORDER BY sm.fecha_creacion DESC", countQuery = "SELECT COUNT(DISTINCT sm.id_socio_membresia) FROM socio_membresia sm "
+                    +
+                    "JOIN usuario_perfil s ON s.id_usuario = sm.fk_id_socio " +
+                    "JOIN membresias m ON m.id_membresia = sm.fk_id_membresia " +
+                    "WHERE sm.estado = 'ACTIVA' " +
+                    "AND (:busqueda IS NULL OR s.nombre ILIKE CONCAT('%', :busqueda, '%') " +
+                    "     OR s.apellido ILIKE CONCAT('%', :busqueda, '%') " +
+                    "     OR s.email ILIKE CONCAT('%', :busqueda, '%')) " +
+                    "AND (:incluyeIA IS NULL OR m.incluye_ia = :incluyeIA) " +
+                    "AND (:esFlexible IS NULL OR m.es_flexible = :esFlexible) " +
+                    "AND (:idMembresia IS NULL OR m.id_membresia = :idMembresia)", nativeQuery = true)
+    Page<SocioMembresia> findSociosActivosConFiltros(
+            Pageable pageable,
+            @Param("busqueda") String busqueda,
+            @Param("incluyeIA") Boolean incluyeIA,
+            @Param("esFlexible") Boolean esFlexible,
+            @Param("idMembresia") Long idMembresia);
+
+    @Query(value = "SELECT sm.* FROM socio_membresia sm " +
+            "JOIN usuario_perfil s ON s.id_usuario = sm.fk_id_socio " +
+            "WHERE sm.fk_id_membresia = :idMembresia " +
+            "AND sm.estado = 'ACTIVA' " +
+            "AND (:busqueda IS NULL OR s.nombre ILIKE CONCAT('%', :busqueda, '%') " +
+            "     OR s.apellido ILIKE CONCAT('%', :busqueda, '%') " +
+            "     OR s.email ILIKE CONCAT('%', :busqueda, '%'))", countQuery = "SELECT COUNT(sm.id_socio_membresia) FROM socio_membresia sm "
+                    +
+                    "JOIN usuario_perfil s ON s.id_usuario = sm.fk_id_socio " +
+                    "WHERE sm.fk_id_membresia = :idMembresia " +
+                    "AND sm.estado = 'ACTIVA' " +
+                    "AND (:busqueda IS NULL OR s.nombre ILIKE CONCAT('%', :busqueda, '%') " +
+                    "     OR s.apellido ILIKE CONCAT('%', :busqueda, '%') " +
+                    "     OR s.email ILIKE CONCAT('%', :busqueda, '%'))", nativeQuery = true)
+    Page<SocioMembresia> findSociosActivosByMembresiaIdConBusqueda(
+            @Param("idMembresia") Long idMembresia,
+            @Param("busqueda") String busqueda,
+            Pageable pageable);
 }

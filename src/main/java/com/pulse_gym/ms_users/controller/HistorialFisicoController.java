@@ -3,6 +3,9 @@ package com.pulse_gym.ms_users.controller;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -144,29 +147,6 @@ public class HistorialFisicoController {
     }
 
     /**
-     * Obtiene todos los registros de historial físico de todos los socios
-     * 
-     * @param userRol Rol del usuario autenticado
-     * @return Lista general de historiales físicos
-     */
-    @GetMapping
-    public ResponseEntity<List<HistorialFisicoResponseDTO>> obtenerTodosHistoriales(
-            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
-        try {
-            List<HistorialFisicoResponseDTO> historial = historialService.obtenerTodosHistoriales(userRol);
-            return ResponseEntity.ok(historial);
-        } catch (SecurityAuthorizationException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al obtener todos los historiales", e);
-        }
-    }
-
-    /**
      * Endpoint para consultar el historial físico del socio autenticado.
      * Usa el email del token para identificar al socio.
      * 
@@ -231,6 +211,46 @@ public class HistorialFisicoController {
             e.printStackTrace();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al obtener tu evolución física", e);
+        }
+    }
+
+    /**
+     * Obtiene todos los historiales físicos con filtros y paginación
+     * 
+     * @param idSocio     Filtro por ID del socio
+     * @param fechaInicio Fecha de inicio del rango
+     * @param fechaFin    Fecha de fin del rango
+     * @param busqueda    Búsqueda por texto
+     * @param pagina      Número de página
+     * @param tamanio     Tamaño de página
+     * @param userRol     Rol del usuario autenticado (header)
+     * @return Página de historiales físicos
+     */
+    @GetMapping
+    public ResponseEntity<Page<HistorialFisicoResponseDTO>> obtenerTodosHistoriales(
+            @RequestParam(required = false) Long idSocio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaFin,
+            @RequestParam(required = false) String busqueda,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "6") int tamanio,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            // ✅ ELIMINAR Sort.by - La native query ya tiene ORDER BY
+            Pageable pageable = PageRequest.of(pagina, tamanio);
+
+            Page<HistorialFisicoResponseDTO> resultado = historialService.obtenerHistorialesPaginados(
+                    userRol, idSocio, fechaInicio, fechaFin, busqueda, pageable);
+
+            return ResponseEntity.ok(resultado);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener los historiales", e);
         }
     }
 }

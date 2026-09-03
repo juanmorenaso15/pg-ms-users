@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -127,4 +129,33 @@ public interface UsuarioPerfilRepository extends JpaRepository<UsuarioPerfil, Lo
      */
     @Query("SELECT COUNT(u) FROM UsuarioPerfil u WHERE u.fechaRegistro >= :fechaInicio")
     long countNuevosDesde(@Param("fechaInicio") LocalDateTime fechaInicio);
+
+    Page<UsuarioPerfil> findByEstado(EnumEstadoUsuario estado, Pageable pageable);
+
+    /**
+     * Busca usuarios por estado con paginación y filtro de búsqueda
+     * 
+     * @param estado   Estado del usuario (ACTIVO, INACTIVO, null = todos)
+     * @param busqueda Texto de búsqueda (opcional)
+     * @param pageable Configuración de paginación
+     * @return Página de usuarios
+     */
+    @Query(value = "SELECT * FROM usuario_perfil u WHERE " +
+            "(:estado IS NULL OR u.estado = CAST(:estado AS text)) AND " +
+            "(:busqueda IS NULL OR " +
+            "u.nombre ILIKE CONCAT('%', :busqueda, '%') OR " +
+            "u.apellido ILIKE CONCAT('%', :busqueda, '%') OR " +
+            "u.email ILIKE CONCAT('%', :busqueda, '%') OR " +
+            "u.documento_identidad ILIKE CONCAT('%', :busqueda, '%'))", countQuery = "SELECT COUNT(*) FROM usuario_perfil u WHERE "
+                    +
+                    "(:estado IS NULL OR u.estado = CAST(:estado AS text)) AND " +
+                    "(:busqueda IS NULL OR " +
+                    "u.nombre ILIKE CONCAT('%', :busqueda, '%') OR " +
+                    "u.apellido ILIKE CONCAT('%', :busqueda, '%') OR " +
+                    "u.email ILIKE CONCAT('%', :busqueda, '%') OR " +
+                    "u.documento_identidad ILIKE CONCAT('%', :busqueda, '%'))", nativeQuery = true)
+    Page<UsuarioPerfil> findUsuariosConFiltros(
+            @Param("estado") String estado,
+            @Param("busqueda") String busqueda,
+            Pageable pageable);
 }

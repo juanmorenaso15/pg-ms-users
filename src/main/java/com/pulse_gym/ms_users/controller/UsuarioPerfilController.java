@@ -2,6 +2,9 @@ package com.pulse_gym.ms_users.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -469,6 +472,40 @@ public class UsuarioPerfilController {
             e.printStackTrace();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al realizar el registro unificado del usuario: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Obtiene usuarios con paginación, filtro por estado y búsqueda
+     * 
+     * @param estado   Estado del usuario (ACTIVO, INACTIVO, o null para todos)
+     * @param busqueda Texto de búsqueda (opcional) - nombre, apellido, email o
+     *                 documento
+     * @param page     Número de página (default: 0)
+     * @param size     Tamaño de página (default: 10)
+     * @param userRol  Rol del usuario autenticado (header)
+     * @return Página de usuarios
+     */
+    @GetMapping("/paginados")
+    public ResponseEntity<Page<UsuarioPerfilResponseDTO>> obtenerUsuariosPaginados(
+            @RequestParam(required = false) EnumEstadoUsuario estado,
+            @RequestParam(required = false) String busqueda,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            Pageable pageable = PageRequest.of(page, size);
+            Page<UsuarioPerfilResponseDTO> usuarios = usuarioService.obtenerUsuariosPaginados(
+                    estado, busqueda, pageable, userRol);
+            return ResponseEntity.ok(usuarios);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener usuarios paginados", e);
         }
     }
 }
