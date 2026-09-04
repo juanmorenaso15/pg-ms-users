@@ -142,20 +142,98 @@ public interface UsuarioPerfilRepository extends JpaRepository<UsuarioPerfil, Lo
      */
     @Query(value = "SELECT * FROM usuario_perfil u WHERE " +
             "(:estado IS NULL OR u.estado = CAST(:estado AS text)) AND " +
-            "(:busqueda IS NULL OR " +
-            "u.nombre ILIKE CONCAT('%', :busqueda, '%') OR " +
-            "u.apellido ILIKE CONCAT('%', :busqueda, '%') OR " +
-            "u.email ILIKE CONCAT('%', :busqueda, '%') OR " +
-            "u.documento_identidad ILIKE CONCAT('%', :busqueda, '%'))", countQuery = "SELECT COUNT(*) FROM usuario_perfil u WHERE "
-                    +
+            "(:busqueda IS NULL OR (" +
+            "  (:p1 IS NULL OR u.nombre ILIKE CONCAT('%', :p1, '%') OR u.apellido ILIKE CONCAT('%', :p1, '%') OR u.email ILIKE CONCAT('%', :p1, '%') OR u.documento_identidad ILIKE CONCAT('%', :p1, '%')) AND "
+            +
+            "  (:p2 IS NULL OR u.nombre ILIKE CONCAT('%', :p2, '%') OR u.apellido ILIKE CONCAT('%', :p2, '%') OR u.email ILIKE CONCAT('%', :p2, '%') OR u.documento_identidad ILIKE CONCAT('%', :p2, '%')) AND "
+            +
+            "  (:p3 IS NULL OR u.nombre ILIKE CONCAT('%', :p3, '%') OR u.apellido ILIKE CONCAT('%', :p3, '%') OR u.email ILIKE CONCAT('%', :p3, '%') OR u.documento_identidad ILIKE CONCAT('%', :p3, '%'))"
+            +
+            "))", countQuery = "SELECT COUNT(*) FROM usuario_perfil u WHERE " +
                     "(:estado IS NULL OR u.estado = CAST(:estado AS text)) AND " +
-                    "(:busqueda IS NULL OR " +
-                    "u.nombre ILIKE CONCAT('%', :busqueda, '%') OR " +
-                    "u.apellido ILIKE CONCAT('%', :busqueda, '%') OR " +
-                    "u.email ILIKE CONCAT('%', :busqueda, '%') OR " +
-                    "u.documento_identidad ILIKE CONCAT('%', :busqueda, '%'))", nativeQuery = true)
+                    "(:busqueda IS NULL OR (" +
+                    "  (:p1 IS NULL OR u.nombre ILIKE CONCAT('%', :p1, '%') OR u.apellido ILIKE CONCAT('%', :p1, '%') OR u.email ILIKE CONCAT('%', :p1, '%') OR u.documento_identidad ILIKE CONCAT('%', :p1, '%')) AND "
+                    +
+                    "  (:p2 IS NULL OR u.nombre ILIKE CONCAT('%', :p2, '%') OR u.apellido ILIKE CONCAT('%', :p2, '%') OR u.email ILIKE CONCAT('%', :p2, '%') OR u.documento_identidad ILIKE CONCAT('%', :p2, '%')) AND "
+                    +
+                    "  (:p3 IS NULL OR u.nombre ILIKE CONCAT('%', :p3, '%') OR u.apellido ILIKE CONCAT('%', :p3, '%') OR u.email ILIKE CONCAT('%', :p3, '%') OR u.documento_identidad ILIKE CONCAT('%', :p3, '%'))"
+                    +
+                    "))", nativeQuery = true)
     Page<UsuarioPerfil> findUsuariosConFiltros(
             @Param("estado") String estado,
             @Param("busqueda") String busqueda,
+            @Param("p1") String p1,
+            @Param("p2") String p2,
+            @Param("p3") String p3,
             Pageable pageable);
+
+    /**
+     * Busca usuarios con filtros y paginación (incluye filtro por IDs)
+     * 
+     * @param estado   Estado del usuario
+     * @param busqueda Búsqueda por texto
+     * @param p1       Primer término de búsqueda
+     * @param p2       Segundo término de búsqueda
+     * @param p3       Tercer término de búsqueda
+     * @param userIds  Lista de IDs de usuarios
+     * @param pageable Configuración de paginación
+     * @return Página de usuarios
+     */
+    @Query(value = "SELECT * FROM usuario_perfil u WHERE " +
+            "(:estado IS NULL OR u.estado = CAST(:estado AS text)) AND " +
+            "(:busqueda IS NULL OR (" +
+            "  (:p1 IS NULL OR u.nombre ILIKE CONCAT('%', :p1, '%') OR u.apellido ILIKE CONCAT('%', :p1, '%') OR u.email ILIKE CONCAT('%', :p1, '%') OR u.documento_identidad ILIKE CONCAT('%', :p1, '%')) AND "
+            +
+            "  (:p2 IS NULL OR u.nombre ILIKE CONCAT('%', :p2, '%') OR u.apellido ILIKE CONCAT('%', :p2, '%') OR u.email ILIKE CONCAT('%', :p2, '%') OR u.documento_identidad ILIKE CONCAT('%', :p2, '%')) AND "
+            +
+            "  (:p3 IS NULL OR u.nombre ILIKE CONCAT('%', :p3, '%') OR u.apellido ILIKE CONCAT('%', :p3, '%') OR u.email ILIKE CONCAT('%', :p3, '%') OR u.documento_identidad ILIKE CONCAT('%', :p3, '%'))"
+            +
+            ")) AND " +
+            "(:userIds IS NULL OR u.id_usuario IN (:userIds))", countQuery = "SELECT COUNT(*) FROM usuario_perfil u WHERE "
+                    +
+                    "(:estado IS NULL OR u.estado = CAST(:estado AS text)) AND " +
+                    "(:busqueda IS NULL OR (" +
+                    "  (:p1 IS NULL OR u.nombre ILIKE CONCAT('%', :p1, '%') OR u.apellido ILIKE CONCAT('%', :p1, '%') OR u.email ILIKE CONCAT('%', :p1, '%') OR u.documento_identidad ILIKE CONCAT('%', :p1, '%')) AND "
+                    +
+                    "  (:p2 IS NULL OR u.nombre ILIKE CONCAT('%', :p2, '%') OR u.apellido ILIKE CONCAT('%', :p2, '%') OR u.email ILIKE CONCAT('%', :p2, '%') OR u.documento_identidad ILIKE CONCAT('%', :p2, '%')) AND "
+                    +
+                    "  (:p3 IS NULL OR u.nombre ILIKE CONCAT('%', :p3, '%') OR u.apellido ILIKE CONCAT('%', :p3, '%') OR u.email ILIKE CONCAT('%', :p3, '%') OR u.documento_identidad ILIKE CONCAT('%', :p3, '%'))"
+                    +
+                    ")) AND " +
+                    "(:userIds IS NULL OR u.id_usuario IN (:userIds))", nativeQuery = true)
+    Page<UsuarioPerfil> findUsuariosConFiltrosYRoles(
+            @Param("estado") String estado,
+            @Param("busqueda") String busqueda,
+            @Param("p1") String p1,
+            @Param("p2") String p2,
+            @Param("p3") String p3,
+            @Param("userIds") List<Long> userIds,
+            Pageable pageable);
+
+    /**
+     * Busca usuarios con filtros sin paginación
+     * 
+     * @param estado   Estado del usuario
+     * @param busqueda Búsqueda por texto
+     * @param p1       Primer término de búsqueda
+     * @param p2       Segundo término de búsqueda
+     * @param p3       Tercer término de búsqueda
+     * @return Lista de usuarios
+     */
+    @Query(value = "SELECT * FROM usuario_perfil u WHERE " +
+            "(:estado IS NULL OR u.estado = CAST(:estado AS text)) AND " +
+            "(:busqueda IS NULL OR (" +
+            "  (:p1 IS NULL OR u.nombre ILIKE CONCAT('%', :p1, '%') OR u.apellido ILIKE CONCAT('%', :p1, '%') OR u.email ILIKE CONCAT('%', :p1, '%') OR u.documento_identidad ILIKE CONCAT('%', :p1, '%')) AND "
+            +
+            "  (:p2 IS NULL OR u.nombre ILIKE CONCAT('%', :p2, '%') OR u.apellido ILIKE CONCAT('%', :p2, '%') OR u.email ILIKE CONCAT('%', :p2, '%') OR u.documento_identidad ILIKE CONCAT('%', :p2, '%')) AND "
+            +
+            "  (:p3 IS NULL OR u.nombre ILIKE CONCAT('%', :p3, '%') OR u.apellido ILIKE CONCAT('%', :p3, '%') OR u.email ILIKE CONCAT('%', :p3, '%') OR u.documento_identidad ILIKE CONCAT('%', :p3, '%'))"
+            +
+            "))", nativeQuery = true)
+    List<UsuarioPerfil> findUsuariosConFiltrosSinPaginacion(
+            @Param("estado") String estado,
+            @Param("busqueda") String busqueda,
+            @Param("p1") String p1,
+            @Param("p2") String p2,
+            @Param("p3") String p3);
 }

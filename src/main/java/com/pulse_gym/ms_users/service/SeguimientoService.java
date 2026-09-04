@@ -869,4 +869,98 @@ public class SeguimientoService {
         }
         return sesiones.get(0).getFechaSesion();
     }
+
+    /**
+     * Exporta la rutina activa del socio autenticado a PDF
+     * 
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Array de bytes del PDF generado
+     * @throws SecurityAuthorizationException Si el usuario no es socio
+     */
+    public byte[] exportarMiRutinaPdf(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden exportar su propia rutina");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        return exportarRutinaPdf(socio.getIdUsuario(), null, userRol, userEmail);
+    }
+
+    /**
+     * Exporta una rutina específica del socio autenticado a PDF
+     * 
+     * @param idRutina  ID de la rutina a exportar
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Array de bytes del PDF generado
+     * @throws SecurityAuthorizationException Si el usuario no es socio o la rutina
+     *                                        no le pertenece
+     */
+    public byte[] exportarMiRutinaEspecificaPdf(Long idRutina, String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden exportar su propia rutina");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        RutinaIA rutina = rutinaRepository.findById(idRutina)
+                .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
+
+        if (!rutina.getSocio().getIdUsuario().equals(socio.getIdUsuario())) {
+            throw new SecurityAuthorizationException("La rutina no pertenece al socio autenticado");
+        }
+
+        return exportarRutinaPdf(socio.getIdUsuario(), idRutina, userRol, userEmail);
+    }
+
+    /**
+     * Exporta el plan nutricional activo del socio autenticado a PDF
+     * 
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Array de bytes del PDF generado
+     * @throws SecurityAuthorizationException Si el usuario no es socio
+     */
+    public byte[] exportarMiPlanNutricionalPdf(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden exportar su propio plan nutricional");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        return exportarPlanNutricionalPdf(socio.getIdUsuario(), null, userRol, userEmail);
+    }
+
+    /**
+     * Exporta un plan nutricional específico del socio autenticado a PDF
+     * 
+     * @param idPlan    ID del plan nutricional a exportar
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Array de bytes del PDF generado
+     * @throws SecurityAuthorizationException Si el usuario no es socio o el plan no
+     *                                        le pertenece
+     */
+    public byte[] exportarMiPlanNutricionalEspecificoPdf(Long idPlan, String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden exportar su propio plan nutricional");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        PlanNutricionalIA plan = planNutricionalRepository.findById(idPlan)
+                .orElseThrow(() -> new RuntimeException("Plan nutricional no encontrado"));
+
+        if (!plan.getSocio().getIdUsuario().equals(socio.getIdUsuario())) {
+            throw new SecurityAuthorizationException("El plan nutricional no pertenece al socio autenticado");
+        }
+
+        return exportarPlanNutricionalPdf(socio.getIdUsuario(), idPlan, userRol, userEmail);
+    }
 }

@@ -185,12 +185,13 @@ public class ExportacionPdfService {
                 .setFontColor(COLOR_PRIMARIO)
                 .setMarginTop(15));
 
-        float[] columnWidths = { 0.5f, 2f, 1f, 0.8f, 0.8f, 1f, 1f, 1f, 1f };
+        float[] columnWidths = { 0.5f, 2f, 1f, 1f, 0.8f, 0.8f, 1f, 1f, 1f, 1f };
         Table table = new Table(UnitValue.createPercentArray(columnWidths))
                 .setWidth(UnitValue.createPercentValue(100))
                 .setMarginTop(5);
 
-        String[] headers = { "#", "Ejercicio", "Grupo", "Día", "Series", "Reps", "Peso", "Descanso", "Notas" };
+        String[] headers = { "#", "Ejercicio", "Grupo", "Equipo", "Día", "Series", "Reps", "Peso", "Descanso",
+                "Notas" };
         for (String header : headers) {
             Cell headerCell = new Cell()
                     .add(new Paragraph(header).setBold().setFontSize(9))
@@ -207,6 +208,12 @@ public class ExportacionPdfService {
                 table.addCell(createCell(String.valueOf(orden), TextAlignment.CENTER, 9));
                 table.addCell(createCell(detalle.getNombreEjercicio(), TextAlignment.LEFT, 9));
                 table.addCell(createCell(detalle.getGrupoMuscular(), TextAlignment.CENTER, 9));
+                table.addCell(createCell(
+                        detalle.getEquipoRequerido() != null
+                                && !detalle.getEquipoRequerido().isEmpty()
+                                        ? detalle.getEquipoRequerido()
+                                        : "Sin equipo",
+                        TextAlignment.CENTER, 9));
 
                 String dia = detalle.getDiaSemana() != null ? "Día " + detalle.getDiaSemana() : "-";
                 table.addCell(createCell(dia, TextAlignment.CENTER, 9));
@@ -226,15 +233,20 @@ public class ExportacionPdfService {
                 table.addCell(createCell(reps, TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg" : "-",
+                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg"
+                                : "-",
                         TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getDescansoSegundos() != null ? detalle.getDescansoSegundos() + "s" : "-",
+                        detalle.getDescansoSegundos() != null
+                                ? detalle.getDescansoSegundos() + "s"
+                                : "-",
                         TextAlignment.CENTER, 9));
 
                 table.addCell(createCell(
-                        detalle.getNotas() != null && !detalle.getNotas().isEmpty() ? detalle.getNotas() : "-",
+                        detalle.getNotas() != null && !detalle.getNotas().isEmpty()
+                                ? detalle.getNotas()
+                                : "-",
                         TextAlignment.LEFT, 8));
 
                 orden++;

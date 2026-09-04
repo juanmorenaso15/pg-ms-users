@@ -73,7 +73,10 @@ public interface DocumentoLegalRepository extends JpaRepository<DocumentoLegal, 
     @Query("SELECT d FROM DocumentoLegal d WHERE " +
             "(:estado IS NULL OR d.estado = :estado) AND " +
             "(:tipoDocumento IS NULL OR d.tipoDocumento = :tipoDocumento) AND " +
-            "(:search IS NULL OR :search = '' OR d.usuario.nombre LIKE %:search% OR d.usuario.apellido LIKE %:search%)")
+            "(:search IS NULL OR :search = '' OR " +
+            "LOWER(d.usuario.nombre) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+            "LOWER(d.usuario.apellido) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+            "LOWER(CONCAT(d.usuario.nombre, ' ', d.usuario.apellido)) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<DocumentoLegal> consultarDocumentosPaginadosFiltros(
             @Param("estado") EnumEstadoDocumentoLegal estado,
             @Param("tipoDocumento") EnumTipoDocumentoLegal tipoDocumento,

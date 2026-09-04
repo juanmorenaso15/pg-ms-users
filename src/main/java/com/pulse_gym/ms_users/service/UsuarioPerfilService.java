@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -686,6 +687,14 @@ public class UsuarioPerfilService {
         usuario.setEstado(estado);
         usuarioRepository.save(usuario);
 
+        try {
+            boolean estadoBoolean = (estado == EnumEstadoUsuario.ACTIVO);
+            authClient.cambiarEstadoInternoPorEmail(usuario.getEmail(), estadoBoolean);
+        } catch (Exception e) {
+            log.error("Error al sincronizar el cambio de estado con pg-ms-auth para el email {}: {}",
+                    usuario.getEmail(), e.getMessage());
+        }
+
         String mensaje = estado == EnumEstadoUsuario.ACTIVO
                 ? "Usuario activado correctamente"
                 : "Usuario desactivado correctamente";
@@ -1092,6 +1101,7 @@ public class UsuarioPerfilService {
     public Page<UsuarioPerfilResponseDTO> obtenerUsuariosPaginados(
             EnumEstadoUsuario estado,
             String busqueda,
+            String roles,
             Pageable pageable,
             String userRol) {
 
@@ -1101,17 +1111,53 @@ public class UsuarioPerfilService {
                 ? busqueda.trim()
                 : null;
 
+        String p1 = null, p2 = null, p3 = null;
+        if (busquedaLimpia != null) {
+            String[] partes = busquedaLimpia.split("\\s+");
+            if (partes.length > 0)
+                p1 = partes[0];
+            if (partes.length > 1)
+                p2 = partes[1];
+            if (partes.length > 2)
+                p3 = partes[2];
+        }
+
         String estadoStr = estado != null ? estado.name() : null;
 
-        Page<UsuarioPerfil> pagina = usuarioRepository.findUsuariosConFiltros(
+        List<UsuarioPerfil> todosLosUsuarios = usuarioRepository.findUsuariosConFiltrosSinPaginacion(
                 estadoStr,
                 busquedaLimpia,
-                pageable);
+                p1,
+                p2,
+                p3);
 
-        return pagina.map(usuario -> {
-            UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
-            enrichWithRol(dto, usuario);
-            return dto;
-        });
+        List<UsuarioPerfilResponseDTO> todosFiltrados = todosLosUsuarios.stream()
+                .map(usuario -> {
+                    UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
+                    enrichWithRol(dto, usuario);
+                    return dto;
+                })
+                .filter(dto -> {
+                    if (roles != null && !roles.trim().isEmpty()) {
+                        String[] rolesArray = roles.split(",");
+                        for (String rol : rolesArray) {
+                            if (dto.getRol() != null && dto.getRol().name().equalsIgnoreCase(rol.trim())) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    return true;
+                })
+                .collect(Collectors.toList());
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), todosFiltrados.size());
+
+        List<UsuarioPerfilResponseDTO> pageContent = todosFiltrados.subList(
+                Math.min(start, todosFiltrados.size()),
+                end > start ? end : start);
+
+        return new PageImpl<>(pageContent, pageable, todosFiltrados.size());
     }
 }

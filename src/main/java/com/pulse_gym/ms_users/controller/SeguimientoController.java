@@ -263,4 +263,162 @@ public class SeguimientoController {
                     "Error al obtener dashboard del socio autenticado", e);
         }
     }
+
+    /**
+     * Exporta la rutina activa del socio autenticado a PDF
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Archivo PDF de la rutina activa
+     */
+    @GetMapping("/rutina/exportar-pdf")
+    public ResponseEntity<byte[]> exportarMiRutinaPdf(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Exportando rutina activa a PDF para socio autenticado: {}", userEmail);
+
+            byte[] pdfBytes = seguimientoService.exportarMiRutinaPdf(userRol, userEmail);
+
+            UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment",
+                    "rutina_" + socio.getIdUsuario() + ".pdf");
+            headers.setContentLength(pdfBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al exportar rutina a PDF: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al exportar rutina a PDF", e);
+        }
+    }
+
+    /**
+     * Exporta una rutina específica del socio autenticado a PDF
+     * 
+     * @param idRutina  ID de la rutina a exportar
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Archivo PDF de la rutina específica
+     */
+    @GetMapping("/rutina/exportar-pdf/{idRutina}")
+    public ResponseEntity<byte[]> exportarMiRutinaEspecificaPdf(
+            @PathVariable Long idRutina,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Exportando rutina específica ID: {} a PDF para socio autenticado: {}",
+                    idRutina, userEmail);
+
+            byte[] pdfBytes = seguimientoService.exportarMiRutinaEspecificaPdf(
+                    idRutina, userRol, userEmail);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment",
+                    "rutina_" + idRutina + ".pdf");
+            headers.setContentLength(pdfBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al exportar rutina específica a PDF: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al exportar rutina específica a PDF", e);
+        }
+    }
+
+    /**
+     * Exporta el plan nutricional activo del socio autenticado a PDF
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Archivo PDF del plan nutricional activo
+     */
+    @GetMapping("/plan-nutricional/exportar-pdf")
+    public ResponseEntity<byte[]> exportarMiPlanNutricionalPdf(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Exportando plan nutricional activo a PDF para socio autenticado: {}", userEmail);
+
+            byte[] pdfBytes = seguimientoService.exportarMiPlanNutricionalPdf(userRol, userEmail);
+
+            UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment",
+                    "plan_nutricional_" + socio.getIdUsuario() + ".pdf");
+            headers.setContentLength(pdfBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al exportar plan nutricional a PDF: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al exportar plan nutricional a PDF", e);
+        }
+    }
+
+    /**
+     * Exporta un plan nutricional específico del socio autenticado a PDF
+     * 
+     * @param idPlan    ID del plan nutricional a exportar
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Archivo PDF del plan nutricional específico
+     */
+    @GetMapping("/plan-nutricional/exportar-pdf/{idPlan}")
+    public ResponseEntity<byte[]> exportarMiPlanNutricionalEspecificoPdf(
+            @PathVariable Long idPlan,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Exportando plan nutricional específico ID: {} a PDF para socio autenticado: {}",
+                    idPlan, userEmail);
+
+            byte[] pdfBytes = seguimientoService.exportarMiPlanNutricionalEspecificoPdf(
+                    idPlan, userRol, userEmail);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment",
+                    "plan_nutricional_" + idPlan + ".pdf");
+            headers.setContentLength(pdfBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al exportar plan nutricional específico a PDF: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al exportar plan nutricional específico a PDF", e);
+        }
+    }
 }
