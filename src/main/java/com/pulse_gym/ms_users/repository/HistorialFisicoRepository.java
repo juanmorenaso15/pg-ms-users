@@ -2,6 +2,7 @@ package com.pulse_gym.ms_users.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -50,4 +51,14 @@ public interface HistorialFisicoRepository
      * @return Lista de todos los historiales
      */
     List<HistorialFisico> findAllByOrderByFechaMedicionDesc();
+
+    /**
+     * Obtiene el primer registro histórico (el más antiguo)
+     */
+    Optional<HistorialFisico> findFirstByOrderByFechaMedicionAsc();
+
+    /**
+     * Obtiene el último registro histórico (el más reciente)
+     */
+    Optional<HistorialFisico> findFirstByOrderByFechaMedicionDesc();
 }
