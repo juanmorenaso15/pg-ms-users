@@ -2,6 +2,7 @@ package com.pulse_gym.ms_users.service;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,8 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulse_gym.lb_common.client.AiClient;
+import com.pulse_gym.lb_common.client.EquipoClient; // ✅ Importar EquipoClient
+import com.pulse_gym.lb_common.dto.EquipoResponseDTO;
 import com.pulse_gym.lb_common.dto.EstadoMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.RutinaGeneracionRequestDTO;
 import com.pulse_gym.lb_common.entity.user.Ejercicio;
@@ -60,6 +63,9 @@ public class RutinaIAService {
 
     /** Cliente Feign para consumir el servicio de IA */
     private final AiClient aiClient;
+
+    /** Cliente Feign para consumir el servicio de equipos */
+    private final EquipoClient equipoClient; // ✅ Agregar EquipoClient
 
     /** Mapper para convertir objetos a JSON */
     private final ObjectMapper objectMapper;
@@ -197,6 +203,9 @@ public class RutinaIAService {
                 .map(this::convertirEjercicioParaIA)
                 .collect(Collectors.toList()));
 
+        List<Map<String, Object>> equiposDisponibles = obtenerEquiposDisponibles(socio.getIdSede());
+        datos.put("equiposDisponibles", equiposDisponibles);
+
         Map<String, Object> statsEjercicios = new HashMap<>();
         statsEjercicios.put("total", (long) ejercicios.size());
         statsEjercicios.put("porGrupoMuscular", ejercicios.stream()
@@ -204,8 +213,57 @@ public class RutinaIAService {
 
         datos.put("statsEjercicios", statsEjercicios);
 
-        log.info("Datos recopilados para socio ID: {} - {} campos", idSocio, datos.size());
+        log.info("Datos recopilados para socio ID: {} - {} campos, {} equipos disponibles",
+                idSocio, datos.size(), equiposDisponibles.size());
         return datos;
+    }
+
+    /**
+     * Obtiene los equipos disponibles en la sede del socio desde operation
+     * 
+     * @param idSede ID de la sede
+     * @return Lista de equipos en formato para IA
+     */
+    private List<Map<String, Object>> obtenerEquiposDisponibles(Integer idSede) {
+        List<Map<String, Object>> equiposFormat = new ArrayList<>();
+        try {
+            List<EquipoResponseDTO> equipos;
+            if (idSede != null) {
+                equipos = equipoClient.obtenerEquiposPorSede(idSede);
+            } else {
+                equipos = equipoClient.obtenerTodosLosEquipos();
+            }
+
+            if (equipos != null && !equipos.isEmpty()) {
+                equiposFormat = equipos.stream()
+                        .filter(e -> "OPERATIVO".equals(e.getEstado()))
+                        .map(this::convertirEquipoParaIA)
+                        .collect(Collectors.toList());
+                log.info("Se encontraron {} equipos operativos en la sede {}", equiposFormat.size(), idSede);
+            } else {
+                log.warn("No se encontraron equipos en la sede {}", idSede);
+            }
+        } catch (Exception e) {
+            log.error("Error al obtener equipos desde operation: {}", e.getMessage());
+        }
+        return equiposFormat;
+    }
+
+    /**
+     * Convierte un EquipoResponseDTO a formato para IA
+     * 
+     * @param equipo DTO del equipo
+     * @return Mapa con los datos del equipo
+     */
+    private Map<String, Object> convertirEquipoParaIA(EquipoResponseDTO equipo) {
+        Map<String, Object> eq = new HashMap<>();
+        eq.put("id", equipo.getIdEquipo());
+        eq.put("nombre", equipo.getNombreEquipo());
+        eq.put("marca", "");
+        eq.put("modelo", "");
+        eq.put("ubicacion", equipo.getDescripcion() != null ? equipo.getDescripcion() : "No especificada");
+        eq.put("estado", equipo.getEstado() != null ? equipo.getEstado() : "OPERATIVO");
+        return eq;
     }
 
     private Map<String, Object> convertirEjercicioParaIA(Ejercicio ejercicio) {

@@ -124,6 +124,7 @@ public class RutinaService {
         dto.setDescansoSegundos(detalle.getDescansoSegundos());
         dto.setNotas(detalle.getNotas());
         dto.setModificadoPor(detalle.getModificadoPor());
+        dto.setEquipoRequerido(detalle.getEquipoRequerido());
         return dto;
     }
 
@@ -288,59 +289,68 @@ public class RutinaService {
             Long userIdAutenticado,
             String userEmail) {
 
-        log.info("Iniciando generación de rutina IA para socio ID: {}", request.getIdSocio());
+        log.info("Iniciando generación de rutina IA para usuario: {}", userEmail);
 
-        UsuarioPerfil socio;
-        if ("socio".equals(userRol)) {
+        UsuarioPerfil socio = null;
+        Long idSocio = request.getIdSocio();
+        Long idSocioFinal = idSocio;
+
+        if (EnumRol.socio.name().equals(userRol)) {
             socio = usuarioRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
 
-            request.setIdSocio(socio.getIdUsuario());
-            log.info("Socio autenticado por email: {}, ID en usuario_perfil: {}", userEmail, socio.getIdUsuario());
+            if (idSocio != null && !idSocio.equals(socio.getIdUsuario())) {
+                log.warn("Socio intentó generar rutina para otro socio. Usando su propio ID: {}", socio.getIdUsuario());
+            }
+
+            idSocioFinal = socio.getIdUsuario();
+            request.setIdSocio(idSocioFinal);
+            log.info("Socio autenticado: {}, ID: {}", userEmail, idSocioFinal);
+
+        } else if (EnumRol.entrenador.name().equals(userRol) ||
+                EnumRol.administrador.name().equals(userRol) ||
+                EnumRol.recepcionista.name().equals(userRol)) {
+
+            if (idSocio == null) {
+                throw new RuntimeException("El campo idSocio es requerido para " + userRol);
+            }
+
+            socio = usuarioRepository.findById(idSocio)
+                    .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + idSocio));
+
+            log.info("{} generando rutina para socio ID: {}", userRol, idSocio);
+
         } else {
-            socio = usuarioRepository.findById(request.getIdSocio())
-                    .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + request.getIdSocio()));
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. Rol '" + userRol + "' no autorizado para generar rutinas");
         }
 
-        rutinaIAService.validarRolGeneracion(userRol, request.getIdSocio(), userIdAutenticado, userEmail);
-        rutinaIAService.validarMembresiaActiva(request.getIdSocio());
+        rutinaIAService.validarRolGeneracion(userRol, idSocioFinal, userIdAutenticado, userEmail);
+        rutinaIAService.validarMembresiaActiva(idSocioFinal);
 
-        Map<String, Object> contexto = rutinaIAService.construirContextoIA(request.getIdSocio(), request);
+        Map<String, Object> contexto = rutinaIAService.construirContextoIA(idSocioFinal, request);
 
         RutinaGeneracionResponseDTO respuestaIA = null;
         try {
             String respuestaJson = aiClient.generarRutinaConContexto(contexto);
-
             log.info("JSON recibido de Python (primeros 300 chars): {}",
                     respuestaJson.length() > 300 ? respuestaJson.substring(0, 300) + "..." : respuestaJson);
+
             com.fasterxml.jackson.core.type.TypeReference<RutinaGeneracionResponseDTO> typeRef = new com.fasterxml.jackson.core.type.TypeReference<RutinaGeneracionResponseDTO>() {
             };
             respuestaIA = objectMapper.readValue(respuestaJson, typeRef);
 
-            if (respuestaIA.getDetalles() != null) {
-                log.info("Detalles recibidos: {}", respuestaIA.getDetalles().size());
-            } else {
-                log.warn("No se recibieron detalles. Intentando parsear manualmente...");
-
-                Map<String, Object> jsonMap = objectMapper.readValue(respuestaJson, Map.class);
-                log.info("Claves del JSON: {}", jsonMap.keySet());
-
-                if (jsonMap.containsKey("detalles")) {
-                    log.info("'detalles' está presente en el JSON");
-                    Object detallesObj = jsonMap.get("detalles");
-                    log.info("detalles es de tipo: {}", detallesObj.getClass().getName());
-                }
+            if (respuestaIA.getDetalles() == null) {
+                log.warn("No hay detalles en la respuesta. Creando rutina sin ejercicios.");
+                respuestaIA.setDetalles(new ArrayList<>());
             }
 
-            log.info("Respuesta de IA recibida correctamente");
+            log.info("Respuesta de IA recibida correctamente con {} detalles",
+                    respuestaIA.getDetalles() != null ? respuestaIA.getDetalles().size() : 0);
+
         } catch (Exception e) {
             log.error("Error al llamar al servicio de IA: {}", e.getMessage());
             throw new RuntimeException("Error al generar rutina con IA: " + e.getMessage());
-        }
-
-        if (respuestaIA.getDetalles() == null) {
-            log.warn("No hay detalles en la respuesta. Se creará rutina sin ejercicios.");
-            respuestaIA.setDetalles(new ArrayList<>());
         }
 
         RutinaIA rutina = guardarRutina(socio, respuestaIA, request);
@@ -351,8 +361,8 @@ public class RutinaService {
         respuestaIA.setFechaGeneracion(rutina.getFechaGeneracion());
         respuestaIA.setGeneradaPorIA(true);
 
-        log.info("Rutina generada exitosamente con ID: {}, para socio: {}",
-                rutina.getIdRutinaIa(), socio.getNombre());
+        log.info("Rutina generada exitosamente con ID: {}, para socio: {} {}",
+                rutina.getIdRutinaIa(), socio.getNombre(), socio.getApellido());
 
         return respuestaIA;
     }
@@ -453,6 +463,7 @@ public class RutinaService {
                 detalle.setDiaSemana(detalleDTO.getDiaSemana());
                 detalle.setOrden(detalleDTO.getOrden());
                 detalle.setNotas(detalleDTO.getNotas());
+                detalle.setEquipoRequerido(detalleDTO.getEquipoRequerido());
 
                 detalleRutinaRepository.save(detalle);
                 rutina.addDetalle(detalle);
@@ -587,13 +598,6 @@ public class RutinaService {
 
         log.info("Ajustando rutina ID: {}, detalle ID: {}", idRutina, request.getIdDetalle());
 
-        if (!EnumRol.entrenador.name().equals(userRol) &&
-                !EnumRol.administrador.name().equals(userRol) &&
-                !EnumRol.recepcionista.name().equals(userRol)) {
-            throw new SecurityAuthorizationException(
-                    "Acceso denegado. Solo entrenadores, administradores o recepcionista pueden ajustar rutinas");
-        }
-
         RutinaIA rutina = rutinaRepository.findById(idRutina)
                 .orElseThrow(() -> new RuntimeException("Rutina no encontrada con ID: " + idRutina));
 
@@ -602,6 +606,30 @@ public class RutinaService {
 
         if (!detalle.getRutinaIa().getIdRutinaIa().equals(idRutina)) {
             throw new RuntimeException("El detalle no pertenece a esta rutina");
+        }
+
+        if (EnumRol.socio.name().equals(userRol)) {
+            UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+            if (!rutina.getSocio().getIdUsuario().equals(socioAutenticado.getIdUsuario())) {
+                throw new SecurityAuthorizationException(
+                        String.format("Acceso denegado. Solo puede ajustar sus propias rutinas. " +
+                                "Tu ID: %d, ID del dueño de la rutina: %d",
+                                socioAutenticado.getIdUsuario(), rutina.getSocio().getIdUsuario()));
+            }
+
+            log.info("Socio ID: {} ajustando su propia rutina ID: {}", socioAutenticado.getIdUsuario(), idRutina);
+
+        } else if (EnumRol.entrenador.name().equals(userRol) ||
+                EnumRol.administrador.name().equals(userRol) ||
+                EnumRol.recepcionista.name().equals(userRol)) {
+
+            log.info("{} ajustando rutina ID: {}", userRol, idRutina);
+
+        } else {
+            throw new SecurityAuthorizationException(
+                    "Acceso denegado. No tiene permisos para ajustar rutinas");
         }
 
         String nombreModificador = "Sistema";
@@ -616,23 +644,35 @@ public class RutinaService {
             log.warn("No se pudo obtener el nombre del usuario: {}", e.getMessage());
         }
 
+        boolean huboCambios = false;
+
         if (request.getSeries() != null) {
             detalle.setSeries(request.getSeries());
+            huboCambios = true;
         }
         if (request.getRepeticionesMin() != null) {
             detalle.setRepeticionesMin(request.getRepeticionesMin());
+            huboCambios = true;
         }
         if (request.getRepeticionesMax() != null) {
             detalle.setRepeticionesMax(request.getRepeticionesMax());
+            huboCambios = true;
         }
         if (request.getPesoSugerido() != null) {
             detalle.setPesoSugerido(request.getPesoSugerido());
+            huboCambios = true;
         }
         if (request.getDescansoSegundos() != null) {
             detalle.setDescansoSegundos(request.getDescansoSegundos());
+            huboCambios = true;
         }
         if (request.getNotas() != null) {
             detalle.setNotas(request.getNotas());
+            huboCambios = true;
+        }
+
+        if (!huboCambios) {
+            throw new RuntimeException("No se especificaron cambios para ajustar la rutina");
         }
 
         detalle.setModificadoPor(nombreModificador);
@@ -644,7 +684,8 @@ public class RutinaService {
         rutina.setVersion(nuevaVersion);
         rutinaRepository.save(rutina);
 
-        guardarHistorialVersion(rutina, nombreModificador, request.getMotivo());
+        String motivo = request.getMotivo() != null ? request.getMotivo() : "Ajuste manual - Versión " + nuevaVersion;
+        guardarHistorialVersion(rutina, nombreModificador, motivo);
 
         log.info("Rutina ID: {} ajustada correctamente por: {}, nueva versión: {}",
                 idRutina, nombreModificador, nuevaVersion);
@@ -656,7 +697,7 @@ public class RutinaService {
                 "idDetalle", request.getIdDetalle(),
                 "nuevaVersion", nuevaVersion,
                 "modificadoPor", nombreModificador,
-                "motivo", request.getMotivo() != null ? request.getMotivo() : "Ajuste manual");
+                "motivo", motivo);
     }
 
     /**

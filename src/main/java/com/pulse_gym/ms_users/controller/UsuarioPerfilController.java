@@ -490,13 +490,14 @@ public class UsuarioPerfilController {
     public ResponseEntity<Page<UsuarioPerfilResponseDTO>> obtenerUsuariosPaginados(
             @RequestParam(required = false) EnumEstadoUsuario estado,
             @RequestParam(required = false) String busqueda,
+            @RequestParam(required = false) String roles,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
         try {
             Pageable pageable = PageRequest.of(page, size);
             Page<UsuarioPerfilResponseDTO> usuarios = usuarioService.obtenerUsuariosPaginados(
-                    estado, busqueda, pageable, userRol);
+                    estado, busqueda, roles, pageable, userRol);
             return ResponseEntity.ok(usuarios);
         } catch (SecurityAuthorizationException e) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);

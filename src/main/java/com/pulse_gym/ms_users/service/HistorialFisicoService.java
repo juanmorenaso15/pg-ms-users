@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -521,16 +522,58 @@ public class HistorialFisicoService {
      */
     @Transactional(readOnly = true)
     public Page<HistorialFisicoResponseDTO> obtenerHistorialesPaginados(
-            String userRol, Long idSocio, LocalDateTime fechaInicio, LocalDateTime fechaFin, String busqueda,
-            Pageable pageable) {
+            String userRol,
+            Long idSocio,
+            LocalDateTime fechaInicio,
+            LocalDateTime fechaFin,
+            String search,
+            int pagina,
+            int tamanio,
+            String sortBy,
+            String direction) {
 
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
-        // Enviar solo el texto limpio (o null si está vacío)
-        String busquedaParam = (busqueda == null || busqueda.trim().isEmpty()) ? null : busqueda.trim();
+        String sortField = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy : "fechaMedicion";
+        org.springframework.data.domain.Sort.Direction sortDirection = ("asc".equalsIgnoreCase(direction))
+                ? org.springframework.data.domain.Sort.Direction.ASC
+                : org.springframework.data.domain.Sort.Direction.DESC;
 
-        Page<HistorialFisico> paginaHistorial = historialRepository.findWithFilters(
-                idSocio, fechaInicio, fechaFin, busquedaParam, pageable);
+        Pageable pageable = PageRequest.of(pagina, tamanio,
+                org.springframework.data.domain.Sort.by(sortDirection, sortField));
+
+        org.springframework.data.jpa.domain.Specification<HistorialFisico> spec = (root, query, criteriaBuilder) -> {
+            var predicates = criteriaBuilder.conjunction();
+
+            var socioJoin = root.join("socio");
+            var recepcionistaJoin = root.join("recepcionista", jakarta.persistence.criteria.JoinType.LEFT);
+
+            if (idSocio != null) {
+                predicates = criteriaBuilder.and(predicates,
+                        criteriaBuilder.equal(socioJoin.get("idUsuario"), idSocio));
+            }
+            if (fechaInicio != null) {
+                predicates = criteriaBuilder.and(predicates,
+                        criteriaBuilder.greaterThanOrEqualTo(root.get("fechaMedicion"), fechaInicio));
+            }
+            if (fechaFin != null) {
+                predicates = criteriaBuilder.and(predicates,
+                        criteriaBuilder.lessThanOrEqualTo(root.get("fechaMedicion"), fechaFin));
+            }
+            if (search != null && !search.trim().isEmpty()) {
+                String pattern = "%" + search.trim().toLowerCase() + "%";
+                var searchPredicate = criteriaBuilder.or(
+                        criteriaBuilder.like(criteriaBuilder.lower(socioJoin.get("nombre")), pattern),
+                        criteriaBuilder.like(criteriaBuilder.lower(socioJoin.get("apellido")), pattern),
+                        criteriaBuilder.like(criteriaBuilder.lower(recepcionistaJoin.get("nombre")), pattern),
+                        criteriaBuilder.like(criteriaBuilder.lower(recepcionistaJoin.get("apellido")), pattern));
+                predicates = criteriaBuilder.and(predicates, searchPredicate);
+            }
+
+            return predicates;
+        };
+
+        Page<HistorialFisico> paginaHistorial = historialRepository.findAll(spec, pageable);
 
         return paginaHistorial.map(this::convertirAResponseDTO);
     }
