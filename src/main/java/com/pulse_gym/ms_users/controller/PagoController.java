@@ -2,6 +2,7 @@ package com.pulse_gym.ms_users.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,9 +21,11 @@ import com.pulse_gym.lb_common.dto.AnularPagoRequestDTO;
 import com.pulse_gym.lb_common.dto.FiltroPagosRequestDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.PagoResponseDTO;
+import com.pulse_gym.lb_common.dto.PaymentSummaryDTO;
 import com.pulse_gym.lb_common.dto.PreferenceResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistrarPagoRequestDTO;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
+import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_users.service.PagoService;
 
 import jakarta.validation.Valid;
@@ -50,9 +53,9 @@ public class PagoController {
     public ResponseEntity<MessegeGlobalDTO> registrarPago(
             @Valid @RequestBody RegistrarPagoRequestDTO requestDTO,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
-            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado) {
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
-            MessegeGlobalDTO response = pagoService.registrarPago(requestDTO, userRol, userIdAutenticado);
+            MessegeGlobalDTO response = pagoService.registrarPago(requestDTO, userRol, userEmail);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (SecurityAuthorizationException e) {
             throw e;
@@ -131,20 +134,18 @@ public class PagoController {
      * @throws SecurityAuthorizationException Si el usuario no tiene permisos
      * @throws ResponseStatusException        Si ocurre un error interno
      */
-    @PostMapping("/filtrar")
-    public ResponseEntity<List<PagoResponseDTO>> filtrarPagos(
+    @PostMapping("/filtrar-paginado")
+    public ResponseEntity<Page<PagoResponseDTO>> filtrarPagosPaginados(
             @RequestBody FiltroPagosRequestDTO filtro,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
         try {
-            List<PagoResponseDTO> pagos = pagoService.filtrarPagos(filtro, userRol);
+            Page<PagoResponseDTO> pagos = pagoService.filtrarPagosPaginados(filtro, userRol);
             return ResponseEntity.ok(pagos);
         } catch (SecurityAuthorizationException e) {
             throw e;
-        } catch (RuntimeException e) {
-            throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al filtrar pagos", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al filtrar pagos paginados", e);
         }
     }
 
@@ -242,5 +243,22 @@ public class PagoController {
         }
     }
 
-    
+    /**
+     * Obtiene el resumen de pagos para el dashboard
+     * 
+     * @param userRol Rol del usuario autenticado (header)
+     * @return DTO con el resumen de pagos
+     */
+    @GetMapping("/resumen")
+    public ResponseEntity<PaymentSummaryDTO> obtenerResumenPagos(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            ValidacionDeRoles.validarAdminORecepcionista(userRol);
+            PaymentSummaryDTO resumen = pagoService.obtenerResumenPagos();
+            return ResponseEntity.ok(resumen);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al obtener resumen de pagos", e);
+        }
+    }
+
 }

@@ -2,13 +2,17 @@ package com.pulse_gym.ms_users.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,12 +30,15 @@ import com.pulse_gym.lb_common.dto.EventoPagoRequestDTO;
 import com.pulse_gym.lb_common.dto.FiltroPagosRequestDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.PagoResponseDTO;
+import com.pulse_gym.lb_common.dto.PaymentSummaryDTO;
 import com.pulse_gym.lb_common.dto.PreferenceResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistrarPagoRequestDTO;
+import com.pulse_gym.lb_common.entity.user.Membresia;
 import com.pulse_gym.lb_common.entity.user.Pago;
 import com.pulse_gym.lb_common.entity.user.SocioMembresia;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
 import com.pulse_gym.lb_common.enums.EnumEstadoPago;
+import com.pulse_gym.lb_common.enums.EnumEstadoSocioMembresia;
 import com.pulse_gym.lb_common.enums.EnumMetodoPago;
 import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
@@ -40,6 +47,8 @@ import com.pulse_gym.ms_users.repository.PagoRepository;
 import com.pulse_gym.ms_users.repository.SocioMembresiaRepository;
 import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
 
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -125,8 +134,7 @@ public class PagoService {
      * @return Mensaje de confirmación con el socio, monto, método y comprobante
      */
     @Transactional
-    public MessegeGlobalDTO registrarPago(RegistrarPagoRequestDTO requestDTO, String userRol,
-            Long userIdAutenticado) {
+    public MessegeGlobalDTO registrarPago(RegistrarPagoRequestDTO requestDTO, String userRol, String userEmail) {
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         SocioMembresia socioMembresia = socioMembresiaRepository.findById(requestDTO.getIdSocioMembresia())
@@ -141,8 +149,14 @@ public class PagoService {
 
         EnumMetodoPago metodoPago = requestDTO.getMetodoPago();
 
-        UsuarioPerfil admin = usuarioRepository.findById(userIdAutenticado)
-                .orElseThrow(() -> new RuntimeException("Usuario administrador no encontrado"));
+        // Búsqueda del usuario autenticado por correo del token
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            throw new RuntimeException("No se pudo identificar el usuario autenticado desde el token.");
+        }
+
+        UsuarioPerfil admin = usuarioRepository.findByEmail(userEmail.trim())
+                .orElseThrow(() -> new RuntimeException(
+                        "Usuario administrador/personal no encontrado con el correo del token: " + userEmail));
 
         BigDecimal montoMembresia = socioMembresia.getMembresia().getPrecioTotal();
         if (montoMembresia == null || montoMembresia.compareTo(BigDecimal.ZERO) <= 0) {
@@ -150,13 +164,12 @@ public class PagoService {
         }
 
         String comprobanteFinal = requestDTO.getNumeroComprobante();
-
         if (comprobanteFinal == null || comprobanteFinal.trim().isEmpty()) {
-
             String codigoUnico = java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
             comprobanteFinal = "REC-" + codigoUnico;
         }
 
+        // 1. Registrar el pago
         Pago pago = new Pago();
         pago.setSocioMembresia(socioMembresia);
         pago.setMonto(montoMembresia);
@@ -169,13 +182,42 @@ public class PagoService {
         pago.setEstado(EnumEstadoPago.APROBADO);
 
         pagoRepository.save(pago);
-
         enviarEventoPago(pago);
 
         try {
-            socioMembresiaService.actualizarEstadoMembresiaPorPago(socioMembresia.getIdSocioMembresia());
+            boolean esFlexible = socioMembresia.getMembresia().getEsFlexible();
+
+            if (esFlexible) {
+                // Prioriza los días que vienen en la petición, luego los días actuales de la
+                // membresía asignada, o por defecto 30
+                int diasASumar = (requestDTO.getCantidadDias() != null && requestDTO.getCantidadDias() > 0)
+                        ? requestDTO.getCantidadDias()
+                        : (socioMembresia.getCantidadDias() != null && socioMembresia.getCantidadDias() > 0
+                                ? socioMembresia.getCantidadDias()
+                                : 30);
+
+                // Si la fecha de vencimiento actual es posterior a hoy, sumamos a partir de esa
+                // fecha; de lo contrario, desde hoy.
+                LocalDate fechaBase = (socioMembresia.getFechaVencimiento() != null
+                        && socioMembresia.getFechaVencimiento().isAfter(LocalDate.now()))
+                                ? socioMembresia.getFechaVencimiento()
+                                : LocalDate.now();
+
+                socioMembresia.setFechaVencimiento(fechaBase.plusDays(diasASumar));
+
+                // Acumulamos correctamente los días totales de la membresía flexible
+                int diasActuales = socioMembresia.getCantidadDias() != null ? socioMembresia.getCantidadDias() : 0;
+                socioMembresia.setCantidadDias(diasActuales + diasASumar);
+                socioMembresia.setEstado(EnumEstadoSocioMembresia.ACTIVA);
+
+                socioMembresiaRepository.save(socioMembresia);
+            } else {
+                // Si NO es flexible, ejecuta la lógica estándar de mes completo
+                socioMembresiaService.actualizarEstadoMembresiaPorPago(socioMembresia.getIdSocioMembresia());
+            }
+
         } catch (Exception e) {
-            log.warn("Error al actualizar estado de membresía: {}", e.getMessage());
+            log.warn("Error al actualizar estado/vencimiento de membresía por pago: {}", e.getMessage());
         }
 
         return new MessegeGlobalDTO(String.format(
@@ -346,34 +388,56 @@ public class PagoService {
      * @throws RuntimeException Si no se encuentran pagos
      */
     @Transactional(readOnly = true)
-    public List<PagoResponseDTO> filtrarPagos(FiltroPagosRequestDTO filtro, String userRol) {
+    public Page<PagoResponseDTO> filtrarPagosPaginados(FiltroPagosRequestDTO filtro, String userRol) {
         ValidacionDeRoles.validarAdminORecepcionista(userRol);
+
+        Pageable pageable = PageRequest.of(
+                filtro.getPage(),
+                filtro.getSize(),
+                Sort.by("fechaPago").descending());
 
         Specification<Pago> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (filtro.getIdSocio() != null) {
-                predicates.add(cb.equal(root.get("socioMembresia").get("socio").get("idUsuario"),
-                        filtro.getIdSocio()));
+            if (filtro.getSearch() != null && !filtro.getSearch().trim().isEmpty()) {
+                String searchTerm = "%" + filtro.getSearch().trim().toLowerCase() + "%";
+
+                Join<Pago, SocioMembresia> socioMembresiaJoin = root.join("socioMembresia");
+                Join<SocioMembresia, UsuarioPerfil> socioJoin = socioMembresiaJoin.join("socio");
+                Join<SocioMembresia, Membresia> membresiaJoin = socioMembresiaJoin.join("membresia", JoinType.LEFT);
+
+                Predicate nombreSocioMatch = cb.like(
+                        cb.lower(cb.concat(cb.concat(socioJoin.get("nombre"), " "), socioJoin.get("apellido"))),
+                        searchTerm);
+                Predicate emailMatch = cb.like(cb.lower(socioJoin.get("email")), searchTerm);
+                Predicate comprobanteMatch = cb.like(cb.lower(root.get("numeroComprobante")), searchTerm);
+                Predicate planMatch = cb.like(cb.lower(membresiaJoin.get("nombre")), searchTerm);
+
+                predicates.add(cb.or(nombreSocioMatch, emailMatch, comprobanteMatch, planMatch));
             }
 
-            if (filtro.getMetodoPago() != null && !filtro.getMetodoPago().isEmpty()) {
-                try {
-                    EnumMetodoPago metodo = EnumMetodoPago
-                            .valueOf(filtro.getMetodoPago().toUpperCase());
-                    predicates.add(cb.equal(root.get("metodoPago"), metodo));
-                } catch (IllegalArgumentException e) {
+            if (filtro.getIdSocio() != null) {
+                predicates.add(cb.equal(root.get("socioMembresia").get("socio").get("idUsuario"), filtro.getIdSocio()));
+            }
 
+            if (filtro.getMetodoPago() != null && !filtro.getMetodoPago().equalsIgnoreCase("TODOS")) {
+                try {
+                    EnumMetodoPago metodo = EnumMetodoPago.valueOf(filtro.getMetodoPago().toUpperCase());
+                    predicates.add(cb.equal(root.get("metodoPago"), metodo));
+                } catch (IllegalArgumentException ignored) {
                 }
             }
 
-            if (filtro.getAnulado() != null) {
-                predicates.add(cb.equal(root.get("anulado"), filtro.getAnulado()));
+            if (filtro.getEstado() != null && !filtro.getEstado().equalsIgnoreCase("TODOS")) {
+                try {
+                    EnumEstadoPago estadoEnum = EnumEstadoPago.valueOf(filtro.getEstado().toUpperCase());
+                    predicates.add(cb.equal(root.get("estado"), estadoEnum));
+                } catch (IllegalArgumentException ignored) {
+                }
             }
 
             if (filtro.getFechaInicio() != null && filtro.getFechaFin() != null) {
-                predicates.add(cb.between(root.get("fechaPago"), filtro.getFechaInicio(),
-                        filtro.getFechaFin()));
+                predicates.add(cb.between(root.get("fechaPago"), filtro.getFechaInicio(), filtro.getFechaFin()));
             } else if (filtro.getFechaInicio() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("fechaPago"), filtro.getFechaInicio()));
             } else if (filtro.getFechaFin() != null) {
@@ -383,15 +447,8 @@ public class PagoService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        List<Pago> pagos = pagoRepository.findAll(spec);
-
-        if (pagos.isEmpty()) {
-            throw new RuntimeException("No se encontraron pagos con los filtros aplicados");
-        }
-
-        return pagos.stream()
-                .map(this::convertirAResponseDTO)
-                .collect(Collectors.toList());
+        Page<Pago> paginaPagos = pagoRepository.findAll(spec, pageable);
+        return paginaPagos.map(this::convertirAResponseDTO);
     }
 
     /**
@@ -443,20 +500,22 @@ public class PagoService {
         Pago pago = pagoRepository.findById(idPago)
                 .orElseThrow(() -> new RuntimeException("Pago no encontrado con ID: " + idPago));
 
-        if (userRol.equals(EnumRol.socio.name())) {
-            UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
-                    .orElseThrow(() -> new RuntimeException(
-                            "Socio autenticado no encontrado con email: " + userEmail));
+        if (userRol != null) {
+            if (userRol.equals(EnumRol.socio.name())) {
+                UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
+                        .orElseThrow(() -> new RuntimeException(
+                                "Socio autenticado no encontrado con email: " + userEmail));
 
-            UsuarioPerfil socioPago = pago.getSocioMembresia().getSocio();
+                UsuarioPerfil socioPago = pago.getSocioMembresia().getSocio();
 
-            if (!socioAutenticado.getEmail().equals(socioPago.getEmail())) {
-                throw new SecurityAuthorizationException(
-                        "Acceso denegado. Solo puede ver sus propios comprobantes");
+                if (!socioAutenticado.getEmail().equals(socioPago.getEmail())) {
+                    throw new SecurityAuthorizationException(
+                            "Acceso denegado. Solo puede ver sus propios comprobantes");
+                }
+            } else if (!userRol.equals(EnumRol.administrador.name())
+                    && !userRol.equals(EnumRol.recepcionista.name())) {
+                throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado: " + userRol);
             }
-        } else if (!userRol.equals(EnumRol.administrador.name())
-                && !userRol.equals(EnumRol.recepcionista.name())) {
-            throw new SecurityAuthorizationException("Acceso denegado. Rol no autorizado: " + userRol);
         }
 
         return convertirAResponseDTO(pago);
@@ -498,5 +557,36 @@ public class PagoService {
         dto.setMetodoPago(pago.getMetodoPago().name());
         eventoPagoAsyncService.enviarEventoPago(dto);
 
+    }
+
+    /**
+     * Obtiene el resumen de pagos con estadísticas generales
+     * 
+     * @return DTO con el resumen de pagos
+     */
+    @Transactional(readOnly = true)
+    public PaymentSummaryDTO obtenerResumenPagos() {
+        List<Pago> pagos = pagoRepository.findAll();
+
+        BigDecimal ingresosMes = pagos.stream()
+                .filter(p -> p.getEstado() == EnumEstadoPago.APROBADO && !p.isAnulado())
+                .map(Pago::getMonto)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        long pagosEsteMes = pagos.stream()
+                .filter(p -> p.getFechaPago() != null
+                        && p.getFechaPago().getMonth() == java.time.LocalDate.now().getMonth())
+                .count();
+
+        long pendientes = pagos.stream().filter(p -> p.getEstado() == EnumEstadoPago.PENDIENTE).count();
+        long completados = pagos.stream().filter(p -> p.getEstado() == EnumEstadoPago.APROBADO).count();
+
+        PaymentSummaryDTO dto = new PaymentSummaryDTO();
+        dto.setIngresosMes(ingresosMes.doubleValue());
+        dto.setPagosEsteMes((int) pagosEsteMes);
+        dto.setPendientesCount((int) pendientes);
+        dto.setVencidosCount(0);
+        dto.setCompletadosCount((int) completados);
+        return dto;
     }
 }
