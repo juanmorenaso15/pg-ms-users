@@ -55,7 +55,7 @@ public class DashboardAdminService {
 
         LocalDate ayer = LocalDate.now().minusDays(1);
 
-        var afluenciaHoy = reportesClient.obtenerAfluenciaHoy();
+        var afluenciaHoy = reportesClient.obtenerAfluenciaHoy(userRol);
         var afluenciaAyer = reportesClient.obtenerAfluenciaPorDia(ayer);
         var ingresos = reportesClient.obtenerIngresosUltimosSeisMeses();
         Integer equiposMantenimiento = equipoClient.obtenerConteoPorEstado("MANTENIMIENTO");

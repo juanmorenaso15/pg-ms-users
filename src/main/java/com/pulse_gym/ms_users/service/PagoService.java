@@ -25,6 +25,7 @@ import com.mercadopago.client.preference.PreferenceRequest;
 import com.mercadopago.exceptions.MPApiException;
 import com.mercadopago.resources.preference.Preference;
 import com.pulse_gym.lb_common.client.EventoPagoClient;
+import com.pulse_gym.lb_common.client.ReportesClient;
 import com.pulse_gym.lb_common.dto.AnularPagoRequestDTO;
 import com.pulse_gym.lb_common.dto.EventoPagoRequestDTO;
 import com.pulse_gym.lb_common.dto.FiltroPagosRequestDTO;
@@ -74,7 +75,7 @@ public class PagoService {
     private final SocioMembresiaService socioMembresiaService;
 
     /** Servicio para enviar eventos de pago de manera asíncrona */
-    private final EventoPagoClient eventoPagoClient;
+    private final ReportesClient reportesClient;
 
     private final EventoPagoAsyncService eventoPagoAsyncService; // Opcional, si quieres async
 
@@ -158,7 +159,13 @@ public class PagoService {
                 .orElseThrow(() -> new RuntimeException(
                         "Usuario administrador/personal no encontrado con el correo del token: " + userEmail));
 
-        BigDecimal montoMembresia = socioMembresia.getMembresia().getPrecioTotal();
+        BigDecimal montoMembresia;
+        if (requestDTO.getMonto() != null && requestDTO.getMonto().compareTo(BigDecimal.ZERO) > 0) {
+            montoMembresia = requestDTO.getMonto();
+        } else {
+            montoMembresia = socioMembresia.getMembresia().getPrecioTotal();
+        }
+
         if (montoMembresia == null || montoMembresia.compareTo(BigDecimal.ZERO) <= 0) {
             throw new RuntimeException("La membresía asociada no tiene un precio válido asignado.");
         }
@@ -169,7 +176,6 @@ public class PagoService {
             comprobanteFinal = "REC-" + codigoUnico;
         }
 
-        // 1. Registrar el pago
         Pago pago = new Pago();
         pago.setSocioMembresia(socioMembresia);
         pago.setMonto(montoMembresia);
@@ -188,16 +194,13 @@ public class PagoService {
             boolean esFlexible = socioMembresia.getMembresia().getEsFlexible();
 
             if (esFlexible) {
-                // Prioriza los días que vienen en la petición, luego los días actuales de la
-                // membresía asignada, o por defecto 30
+
                 int diasASumar = (requestDTO.getCantidadDias() != null && requestDTO.getCantidadDias() > 0)
                         ? requestDTO.getCantidadDias()
                         : (socioMembresia.getCantidadDias() != null && socioMembresia.getCantidadDias() > 0
                                 ? socioMembresia.getCantidadDias()
                                 : 30);
 
-                // Si la fecha de vencimiento actual es posterior a hoy, sumamos a partir de esa
-                // fecha; de lo contrario, desde hoy.
                 LocalDate fechaBase = (socioMembresia.getFechaVencimiento() != null
                         && socioMembresia.getFechaVencimiento().isAfter(LocalDate.now()))
                                 ? socioMembresia.getFechaVencimiento()
@@ -205,14 +208,12 @@ public class PagoService {
 
                 socioMembresia.setFechaVencimiento(fechaBase.plusDays(diasASumar));
 
-                // Acumulamos correctamente los días totales de la membresía flexible
                 int diasActuales = socioMembresia.getCantidadDias() != null ? socioMembresia.getCantidadDias() : 0;
                 socioMembresia.setCantidadDias(diasActuales + diasASumar);
                 socioMembresia.setEstado(EnumEstadoSocioMembresia.ACTIVA);
 
                 socioMembresiaRepository.save(socioMembresia);
             } else {
-                // Si NO es flexible, ejecuta la lógica estándar de mes completo
                 socioMembresiaService.actualizarEstadoMembresiaPorPago(socioMembresia.getIdSocioMembresia());
             }
 
@@ -478,6 +479,15 @@ public class PagoService {
 
         pagoRepository.save(pago);
 
+        try {
+            Long socioId = pago.getSocioMembresia().getSocio().getIdUsuario();
+            LocalDateTime fechaPago = pago.getFechaPago();
+            reportesClient.anularEventoPago(socioId, fechaPago);
+            log.info("Evento de pago sincronizado y anulado en pg-ms-reports para el pago ID: {}", pago.getIdPago());
+        } catch (Exception e) {
+            log.error("Error al notificar la anulación del pago al microservicio de reportes: {}", e.getMessage());
+        }
+
         return new MessegeGlobalDTO(String.format(
                 "Pago ID: %d anulado correctamente. Motivo: %s",
                 pago.getIdPago(),
@@ -568,14 +578,29 @@ public class PagoService {
     public PaymentSummaryDTO obtenerResumenPagos() {
         List<Pago> pagos = pagoRepository.findAll();
 
+        java.time.LocalDate hoy = java.time.LocalDate.now();
+        java.time.Month mesActual = hoy.getMonth();
+        int anioActual = hoy.getYear();
+
+        java.time.LocalDate mesAnteriorDate = hoy.minusMonths(1);
+        java.time.Month mesPasado = mesAnteriorDate.getMonth();
+        int anioPasado = mesAnteriorDate.getYear();
+
         BigDecimal ingresosMes = pagos.stream()
-                .filter(p -> p.getEstado() == EnumEstadoPago.APROBADO && !p.isAnulado())
+                .filter(p -> p.getEstado() == EnumEstadoPago.APROBADO && !p.isAnulado() && p.getFechaPago() != null)
+                .filter(p -> p.getFechaPago().getMonth() == mesActual && p.getFechaPago().getYear() == anioActual)
+                .map(Pago::getMonto)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal ingresosMesAnterior = pagos.stream()
+                .filter(p -> p.getEstado() == EnumEstadoPago.APROBADO && !p.isAnulado() && p.getFechaPago() != null)
+                .filter(p -> p.getFechaPago().getMonth() == mesPasado && p.getFechaPago().getYear() == anioPasado)
                 .map(Pago::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         long pagosEsteMes = pagos.stream()
                 .filter(p -> p.getFechaPago() != null
-                        && p.getFechaPago().getMonth() == java.time.LocalDate.now().getMonth())
+                        && p.getFechaPago().getMonth() == mesActual && p.getFechaPago().getYear() == anioActual)
                 .count();
 
         long pendientes = pagos.stream().filter(p -> p.getEstado() == EnumEstadoPago.PENDIENTE).count();
@@ -583,6 +608,7 @@ public class PagoService {
 
         PaymentSummaryDTO dto = new PaymentSummaryDTO();
         dto.setIngresosMes(ingresosMes.doubleValue());
+        dto.setIngresosMesAnterior(ingresosMesAnterior.doubleValue());
         dto.setPagosEsteMes((int) pagosEsteMes);
         dto.setPendientesCount((int) pendientes);
         dto.setVencidosCount(0);
