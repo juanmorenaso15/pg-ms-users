@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ import com.pulse_gym.lb_common.client.AuthServiceClient;
 import com.pulse_gym.lb_common.dto.EvolucionFisicaDTO;
 import com.pulse_gym.lb_common.dto.HistorialFisicoRequestDTO;
 import com.pulse_gym.lb_common.dto.HistorialFisicoResponseDTO;
+import com.pulse_gym.lb_common.dto.HistorialResumenDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.entity.user.HistorialFisico;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
@@ -27,6 +30,7 @@ import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_users.repository.HistorialFisicoRepository;
 import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
 
+import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -509,15 +513,18 @@ public class HistorialFisicoService {
         return evolucion;
     }
 
-    /**
+/**
      * Obtiene historiales físicos con filtros y paginación
      * 
      * @param userRol     Rol del usuario autenticado
      * @param idSocio     Filtro por ID del socio
      * @param fechaInicio Fecha de inicio del rango
      * @param fechaFin    Fecha de fin del rango
-     * @param busqueda    Búsqueda por nombre o apellido
-     * @param pageable    Configuración de paginación
+     * @param search      Búsqueda por nombre o apellido
+     * @param pagina      Número de página
+     * @param tamanio     Tamaño de página
+     * @param sortBy      Campo de ordenamiento
+     * @param direction   Dirección (asc o desc)
      * @return Página de historiales físicos
      */
     @Transactional(readOnly = true)
@@ -535,18 +542,17 @@ public class HistorialFisicoService {
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         String sortField = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy : "fechaMedicion";
-        org.springframework.data.domain.Sort.Direction sortDirection = ("asc".equalsIgnoreCase(direction))
-                ? org.springframework.data.domain.Sort.Direction.ASC
-                : org.springframework.data.domain.Sort.Direction.DESC;
+        Sort.Direction sortDirection = ("asc".equalsIgnoreCase(direction))
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
 
-        Pageable pageable = PageRequest.of(pagina, tamanio,
-                org.springframework.data.domain.Sort.by(sortDirection, sortField));
+        Pageable pageable = PageRequest.of(pagina, tamanio, Sort.by(sortDirection, sortField));
 
-        org.springframework.data.jpa.domain.Specification<HistorialFisico> spec = (root, query, criteriaBuilder) -> {
+        Specification<HistorialFisico> spec = (root, query, criteriaBuilder) -> {
             var predicates = criteriaBuilder.conjunction();
 
-            var socioJoin = root.join("socio");
-            var recepcionistaJoin = root.join("recepcionista", jakarta.persistence.criteria.JoinType.LEFT);
+            var socioJoin = root.join("socio", JoinType.INNER);
+            var recepcionistaJoin = root.join("recepcionista", JoinType.LEFT);
 
             if (idSocio != null) {
                 predicates = criteriaBuilder.and(predicates,
@@ -563,10 +569,10 @@ public class HistorialFisicoService {
             if (search != null && !search.trim().isEmpty()) {
                 String pattern = "%" + search.trim().toLowerCase() + "%";
                 var searchPredicate = criteriaBuilder.or(
-                        criteriaBuilder.like(criteriaBuilder.lower(socioJoin.get("nombre")), pattern),
-                        criteriaBuilder.like(criteriaBuilder.lower(socioJoin.get("apellido")), pattern),
-                        criteriaBuilder.like(criteriaBuilder.lower(recepcionistaJoin.get("nombre")), pattern),
-                        criteriaBuilder.like(criteriaBuilder.lower(recepcionistaJoin.get("apellido")), pattern));
+                        criteriaBuilder.like(criteriaBuilder.lower(socioJoin.get("nombre").as(String.class)), pattern),
+                        criteriaBuilder.like(criteriaBuilder.lower(socioJoin.get("apellido").as(String.class)), pattern),
+                        criteriaBuilder.like(criteriaBuilder.lower(recepcionistaJoin.get("nombre").as(String.class)), pattern),
+                        criteriaBuilder.like(criteriaBuilder.lower(recepcionistaJoin.get("apellido").as(String.class)), pattern));
                 predicates = criteriaBuilder.and(predicates, searchPredicate);
             }
 
@@ -576,5 +582,30 @@ public class HistorialFisicoService {
         Page<HistorialFisico> paginaHistorial = historialRepository.findAll(spec, pageable);
 
         return paginaHistorial.map(this::convertirAResponseDTO);
+    }
+
+    /**
+     * 
+     * @param userRol
+     * @return
+     */
+    @Transactional(readOnly = true)
+    public HistorialResumenDTO obtenerResumenMetricas(String userRol) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        long total = historialRepository.count();
+        LocalDateTime primera = historialRepository.findFirstByOrderByFechaMedicionAsc()
+                .map(HistorialFisico::getFechaMedicion).orElse(null);
+        LocalDateTime ultima = historialRepository.findFirstByOrderByFechaMedicionDesc()
+                .map(HistorialFisico::getFechaMedicion).orElse(null);
+
+        // Obtener lista única de socios que tienen historiales
+        List<HistorialResumenDTO.SocioSimpleDTO> socios = historialRepository.findAll().stream()
+                .map(h -> h.getSocio())
+                .distinct()
+                .map(s -> new HistorialResumenDTO.SocioSimpleDTO(s.getIdUsuario(), s.getNombre() + " " + s.getApellido()))
+                .collect(Collectors.toList());
+
+        return new HistorialResumenDTO(total, primera, ultima, socios);
     }
 }

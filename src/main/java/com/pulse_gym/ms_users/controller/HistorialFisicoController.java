@@ -3,6 +3,7 @@ package com.pulse_gym.ms_users.controller;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.pulse_gym.lb_common.dto.EvolucionFisicaDTO;
 import com.pulse_gym.lb_common.dto.HistorialFisicoRequestDTO;
 import com.pulse_gym.lb_common.dto.HistorialFisicoResponseDTO;
+import com.pulse_gym.lb_common.dto.HistorialResumenDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.ms_users.service.HistorialFisicoService;
@@ -240,6 +242,51 @@ public class HistorialFisicoController {
                     "Error al obtener los historiales",
                     e);
         }
+    }
+
+    /**
+     * 
+     * @param idSocio
+     * @param fechaInicio
+     * @param fechaFin
+     * @param search
+     * @param pagina
+     * @param tamanio
+     * @param sortBy
+     * @param direction
+     * @param userRol
+     * @return
+     */
+    @GetMapping("/paginados")
+    public ResponseEntity<Page<HistorialFisicoResponseDTO>> obtenerHistorialesPaginados(
+            @RequestParam(required = false) Long idSocio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaFin,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "10") int tamanio,
+            @RequestParam(defaultValue = "fechaMedicion") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            Page<HistorialFisicoResponseDTO> resultado = historialService.obtenerHistorialesPaginados(
+                    userRol, idSocio, fechaInicio, fechaFin, search, pagina, tamanio, sortBy, direction);
+            return ResponseEntity.ok(resultado);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener los historiales paginados",
+                    e);
+        }
+    }
+
+    @GetMapping("/resumen")
+    public ResponseEntity<HistorialResumenDTO> obtenerResumenMetricas(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        return ResponseEntity.ok(historialService.obtenerResumenMetricas(userRol));
     }
 
 }

@@ -108,7 +108,7 @@ public class RutinaService {
      * @param detalle Entidad a convertir
      * @return DTO del detalle
      */
-    private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina detalle) {
+private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina detalle) {
         DetalleRutinaResponseDTO dto = new DetalleRutinaResponseDTO();
         dto.setIdDetalle(detalle.getIdDetalleRutina());
         dto.setIdEjercicio(detalle.getEjercicio().getIdEjercicio());
@@ -125,6 +125,8 @@ public class RutinaService {
         dto.setNotas(detalle.getNotas());
         dto.setModificadoPor(detalle.getModificadoPor());
         dto.setEquipoRequerido(detalle.getEquipoRequerido());
+        dto.setSemana(detalle.getSemana());
+        
         return dto;
     }
 
@@ -464,6 +466,7 @@ public class RutinaService {
                 detalle.setOrden(detalleDTO.getOrden());
                 detalle.setNotas(detalleDTO.getNotas());
                 detalle.setEquipoRequerido(detalleDTO.getEquipoRequerido());
+                detalle.setSemana(detalleDTO.getSemana() != null ? detalleDTO.getSemana() : 1);
 
                 detalleRutinaRepository.save(detalle);
                 rutina.addDetalle(detalle);

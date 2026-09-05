@@ -51,8 +51,7 @@ public class QRCodeService {
      * @return Array de bytes con la imagen PNG del QR
      */
     public byte[] generarQRComprobante(Long pagoId) {
-        String baseUrl = System.getenv().getOrDefault("APP_URL", "http://localhost:8081");
-        String url = baseUrl + "/validar-comprobante/" + pagoId;
+        String url = "https://front-end-pulsegym.pages.dev/comprobante/idPago=" + pagoId;
 
         return generateQRCode(url, 150, 150);
     }
