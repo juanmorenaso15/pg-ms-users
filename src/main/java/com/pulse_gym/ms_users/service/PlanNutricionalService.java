@@ -227,18 +227,24 @@ public class PlanNutricionalService {
         plan.setVersion(1);
         plan.setActivo(true);
 
+        PlanNutricionalIA savedPlan = planNutricionalRepository.save(plan);
+        planNutricionalRepository.flush();
+
         List<PlanNutricionalIA> planesAnteriores = planNutricionalRepository
                 .findBySocio_IdUsuarioAndActivoTrueOrderByFechaGeneracionDesc(socio.getIdUsuario());
+
         for (PlanNutricionalIA p : planesAnteriores) {
-            p.setActivo(false);
+            if (!p.getIdPlanNutricional().equals(savedPlan.getIdPlanNutricional())) {
+                p.setActivo(false);
+            }
         }
         if (!planesAnteriores.isEmpty()) {
             planNutricionalRepository.saveAll(planesAnteriores);
         }
 
-        guardarHistorialVersionInicial(plan);
+        guardarHistorialVersionInicial(savedPlan);
 
-        return planNutricionalRepository.save(plan);
+        return savedPlan;
     }
 
     /**
@@ -266,7 +272,8 @@ public class PlanNutricionalService {
             }
         }
 
-        PlanNutricionalIA plan = planNutricionalRepository.findBySocio_IdUsuarioAndActivoTrue(idSocio)
+        PlanNutricionalIA plan = planNutricionalRepository
+                .findTopBySocio_IdUsuarioAndActivoTrueOrderByFechaGeneracionDesc(idSocio)
                 .orElseThrow(() -> new RuntimeException("El socio no tiene un plan nutricional activo"));
 
         return convertirAResponseDTO(plan);
@@ -725,5 +732,187 @@ public class PlanNutricionalService {
         return historial.stream()
                 .map(this::convertirHistorialAResponseDTO)
                 .collect(Collectors.toList());
+    }
+
+
+    /**
+     * Genera un plan nutricional para el socio autenticado.
+     * El socio no necesita enviar idSocio, se obtiene del token.
+     * 
+     * @param request           Preferencias del socio (idSocio es opcional)
+     * @param userRol           Rol del usuario autenticado
+     * @param userIdAutenticado ID del usuario autenticado
+     * @param userEmail         Email del usuario autenticado
+     * @return DTO con el plan nutricional generado
+     */
+    @Transactional
+    public PlanNutricionalGeneracionResponseDTO generarMiPlanNutricional(
+            PlanNutricionalGeneracionRequestDTO request,
+            String userRol,
+            Long userIdAutenticado,
+            String userEmail) {
+
+        log.info("Generando plan nutricional para socio autenticado: {}", userEmail);
+
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden generar su propio plan nutricional");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        if (request.getIdSocio() != null && !request.getIdSocio().equals(socio.getIdUsuario())) {
+            log.warn("Socio intentó generar plan para otro socio. Usando su propio ID: {}", socio.getIdUsuario());
+        }
+        request.setIdSocio(socio.getIdUsuario());
+
+        return generarPlanNutricional(request, userRol, userIdAutenticado, userEmail);
+    }
+
+    /**
+     * Obtiene el plan nutricional activo del socio autenticado.
+     * 
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return DTO del plan nutricional activo
+     */
+    public PlanNutricionalGeneracionResponseDTO obtenerMiPlanActivo(String userRol, String userEmail) {
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden ver su propio plan nutricional");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        PlanNutricionalIA plan = planNutricionalRepository
+                .findTopBySocio_IdUsuarioAndActivoTrueOrderByFechaGeneracionDesc(socio.getIdUsuario())
+                .orElseThrow(() -> new RuntimeException("No tienes un plan nutricional activo"));
+
+        return convertirAResponseDTO(plan);
+    }
+
+    /**
+     * Ajusta el plan nutricional activo del socio autenticado.
+     * 
+     * @param request   Datos de ajuste del plan
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Mapa con información sobre el ajuste realizado
+     */
+    @Transactional
+    public Map<String, Object> ajustarMiPlanNutricional(
+            PlanNutricionalAjusteRequestDTO request,
+            String userRol,
+            Long userIdAutenticado,
+            String userEmail) {
+
+        log.info("Ajustando plan nutricional del socio autenticado: {}", userEmail);
+
+        if (!EnumRol.socio.name().equals(userRol)) {
+            throw new SecurityAuthorizationException("Solo los socios pueden ajustar su propio plan nutricional");
+        }
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        PlanNutricionalIA plan = planNutricionalRepository
+                .findTopBySocio_IdUsuarioAndActivoTrueOrderByFechaGeneracionDesc(socio.getIdUsuario())
+                .orElseThrow(() -> new RuntimeException("No tienes un plan nutricional activo para ajustar"));
+
+        if (!plan.getSocio().getIdUsuario().equals(socio.getIdUsuario())) {
+            throw new SecurityAuthorizationException(
+                    String.format("Acceso denegado. El plan no te pertenece. " +
+                            "Tu ID: %d, ID del dueño del plan: %d",
+                            socio.getIdUsuario(), plan.getSocio().getIdUsuario()));
+        }
+
+        String nombreModificador = socio.getNombre() + " " + socio.getApellido();
+
+        boolean huboCambios = aplicarCambiosPlan(plan, request);
+
+        if (!huboCambios) {
+            throw new RuntimeException("No se especificaron cambios para realizar");
+        }
+
+        plan.setVersion(plan.getVersion() + 1);
+        plan.setActivo(true);
+        plan.setModificadoPor(nombreModificador);
+        plan.setFechaModificacion(LocalDateTime.now());
+        plan.setMotivoModificacion(request.getMotivo() != null ? request.getMotivo() : "Ajuste por el socio");
+
+        try {
+            PlanNutricionalGeneracionResponseDTO dto = convertirAResponseDTO(plan);
+            String planJson = objectMapper.writeValueAsString(dto);
+            plan.setPlanGenerado(planJson);
+        } catch (JsonProcessingException e) {
+            log.warn("Error al actualizar planGenerado: {}", e.getMessage());
+        }
+
+        plan = planNutricionalRepository.save(plan);
+
+        guardarHistorialVersion(plan, nombreModificador, request.getMotivo());
+
+        log.info("Plan nutricional ajustado por socio ID: {}, nueva versión: {}",
+                socio.getIdUsuario(), plan.getVersion());
+
+        return Map.of(
+                "success", true,
+                "message", "Plan nutricional ajustado correctamente",
+                "idPlan", plan.getIdPlanNutricional(),
+                "nuevaVersion", plan.getVersion(),
+                "modificadoPor", nombreModificador,
+                "fechaModificacion", plan.getFechaModificacion().toString(),
+                "motivo", request.getMotivo() != null ? request.getMotivo() : "Ajuste por el socio");
+    }
+
+    /**
+     * Aplica los cambios del request al plan nutricional y devuelve si hubo cambios
+     * @param plan El plan nutricional a modificar
+     * @param request Los datos de ajuste del plan
+     * @return true si hubo cambios, false si no hubo cambios
+     */
+    private boolean aplicarCambiosPlan(PlanNutricionalIA plan, PlanNutricionalAjusteRequestDTO request) {
+        boolean huboCambios = false;
+
+        if (request.getCaloriasDiarias() != null) {
+            plan.setCaloriasDiarias(request.getCaloriasDiarias());
+            huboCambios = true;
+        }
+        if (request.getProteinasG() != null) {
+            plan.setProteinasG(request.getProteinasG());
+            huboCambios = true;
+        }
+        if (request.getCarbohidratosG() != null) {
+            plan.setCarbohidratosG(request.getCarbohidratosG());
+            huboCambios = true;
+        }
+        if (request.getGrasasG() != null) {
+            plan.setGrasasG(request.getGrasasG());
+            huboCambios = true;
+        }
+        if (request.getExplicacionIA() != null) {
+            plan.setExplicacionIA(request.getExplicacionIA());
+            huboCambios = true;
+        }
+        if (request.getRestriccionesDieteticas() != null) {
+            if (request.getRestriccionesDieteticas().isEmpty()) {
+                plan.setRestriccionesDieteticas("Sin restricciones dietéticas");
+            } else {
+                plan.setRestriccionesDieteticas(String.join(", ", request.getRestriccionesDieteticas()));
+            }
+            huboCambios = true;
+        }
+        if (request.getSugerenciasComidas() != null && !request.getSugerenciasComidas().isEmpty()) {
+            try {
+                String sugerenciasJson = objectMapper.writeValueAsString(request.getSugerenciasComidas());
+                plan.setSugerenciasComidas(sugerenciasJson);
+                huboCambios = true;
+            } catch (JsonProcessingException e) {
+                log.error("Error al serializar sugerencias de comidas: {}", e.getMessage());
+                throw new RuntimeException("Error al guardar las sugerencias de comidas: " + e.getMessage());
+            }
+        }
+
+        return huboCambios;
     }
 }
