@@ -136,6 +136,7 @@ public class PagoService {
         log.info("-> ID Socio Membresía en Request: {}", requestDTO.getIdSocioMembresia());
         log.info("-> PaymentMethodId: {}", requestDTO.getPaymentMethodId());
         log.info("-> Cuotas (Installments): {}", requestDTO.getInstallments());
+        log.info("-> Método de Pago seleccionado desde UI: {}", requestDTO.getMetodoPago());
         log.info("-> Token de Tarjeta (Primeros chars): {}",
                 requestDTO.getToken() != null && requestDTO.getToken().length() > 6
                         ? requestDTO.getToken().substring(0, 6) + "..."
@@ -228,11 +229,18 @@ public class PagoService {
             log.info("-> Payment Method ID: {}", payment.getPaymentMethodId());
             log.info("-> Statement Descriptor: {}", payment.getStatementDescriptor());
 
+            EnumMetodoPago metodoPagoFinal;
+            if (requestDTO.getMetodoPago() != null) {
+                metodoPagoFinal = requestDTO.getMetodoPago();
+            } else {
+                metodoPagoFinal = mapearMetodoPagoDesdePaymentMethodId(requestDTO.getPaymentMethodId());
+            }
+
             Pago nuevoPago = new Pago();
             nuevoPago.setSocioMembresia(socioMembresia);
             nuevoPago.setMonto(montoFormateado);
             nuevoPago.setFechaPago(LocalDateTime.now());
-            nuevoPago.setMetodoPago(mapearMetodoPagoDesdePaymentMethodId(requestDTO.getPaymentMethodId()));
+            nuevoPago.setMetodoPago(metodoPagoFinal);
             nuevoPago.setPaymentIdMp(String.valueOf(payment.getId()));
             nuevoPago.setNumeroComprobante("MP-" + payment.getId());
             nuevoPago.setAnulado(false);
@@ -1392,5 +1400,122 @@ public class PagoService {
         responseDTO.setHistorialPagos(historialPagosDTO);
 
         return responseDTO;
+    }
+
+    /**
+     * Genera el comprobante PDF de un pago perteneciente al socio autenticado por
+     * su email
+     * 
+     * @param idPago    ID del pago
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del socio autenticado
+     * @return Array de bytes del PDF del comprobante
+     */
+    @Transactional(readOnly = true)
+    public byte[] generarComprobantePDFPropio(Long idPago, String userRol, String userEmail) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        Pago pago = pagoRepository.findById(idPago)
+                .orElseThrow(() -> new RuntimeException("Pago no encontrado con ID: " + idPago));
+
+        UsuarioPerfil socioPago = pago.getSocioMembresia().getSocio();
+        if (!socio.getIdUsuario().equals(socioPago.getIdUsuario())) {
+            log.warn(
+                    "ACCESO DENEGADO: El socio ID {} intentó descargar el comprobante ID {} perteneciente al socio ID {}",
+                    socio.getIdUsuario(), idPago, socioPago.getIdUsuario());
+            throw new SecurityAuthorizationException("Acceso denegado. No puedes descargar comprobantes ajenos.");
+        }
+
+        PagoResponseDTO pagoDTO = convertirAResponseDTO(pago);
+        return pagoPDFService.generarComprobantePDF(pagoDTO);
+    }
+
+    /**
+     * Filtra y pagina los pagos de un socio o de todo el sistema según el rol y
+     * filtros
+     * 
+     * @param filtro    DTO con los filtros (estado, metodoPago, referencia/search,
+     *                  fechas, paginación)
+     * @param userRol   Rol del usuario autenticado
+     * @param userEmail Email del usuario autenticado
+     * @return Página de pagos filtrados
+     */
+    @Transactional(readOnly = true)
+    public Page<PagoResponseDTO> filtrarPagosSocioPaginados(FiltroPagosRequestDTO filtro, String userRol,
+            String userEmail) {
+        ValidacionDeRoles.validarCualquierRol(userRol);
+
+        // Si es socio, forzamos que solo pueda ver sus propios pagos por seguridad
+        if (userRol.equalsIgnoreCase(EnumRol.socio.name())) {
+            UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+            filtro.setIdSocio(socio.getIdUsuario());
+        }
+
+        Pageable pageable = PageRequest.of(
+                filtro.getPage(),
+                filtro.getSize(),
+                Sort.by("fechaPago").descending());
+
+        Specification<Pago> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (filtro.getSearch() != null && !filtro.getSearch().trim().isEmpty()) {
+                String searchTerm = "%" + filtro.getSearch().trim().toLowerCase() + "%";
+
+                Join<Pago, SocioMembresia> socioMembresiaJoin = root.join("socioMembresia", JoinType.LEFT);
+                Join<SocioMembresia, UsuarioPerfil> socioJoin = socioMembresiaJoin.join("socio", JoinType.LEFT);
+                Join<SocioMembresia, Membresia> membresiaJoin = socioMembresiaJoin.join("membresia", JoinType.LEFT);
+
+                Predicate nombreSocioMatch = cb.like(
+                        cb.lower(cb.concat(cb.concat(socioJoin.get("nombre"), " "), socioJoin.get("apellido"))),
+                        searchTerm);
+                Predicate emailMatch = cb.like(cb.lower(socioJoin.get("email")), searchTerm);
+                Predicate comprobanteMatch = cb.like(cb.lower(root.get("numeroComprobante")), searchTerm);
+                Predicate planMatch = cb.like(cb.lower(membresiaJoin.get("nombre")), searchTerm);
+
+                predicates.add(cb.or(nombreSocioMatch, emailMatch, comprobanteMatch, planMatch));
+            }
+
+            if (filtro.getIdSocio() != null) {
+                predicates.add(cb.equal(root.get("socioMembresia").get("socio").get("idUsuario"), filtro.getIdSocio()));
+            }
+
+            if (filtro.getMetodoPago() != null && !filtro.getMetodoPago().equalsIgnoreCase("TODOS")
+                    && !filtro.getMetodoPago().isBlank()) {
+                try {
+                    EnumMetodoPago metodo = EnumMetodoPago.valueOf(filtro.getMetodoPago().toUpperCase());
+                    predicates.add(cb.equal(root.get("metodoPago"), metodo));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+
+            // Filtro por Estado
+            if (filtro.getEstado() != null && !filtro.getEstado().equalsIgnoreCase("TODOS")
+                    && !filtro.getEstado().isBlank()) {
+                try {
+                    EnumEstadoPago estadoEnum = EnumEstadoPago.valueOf(filtro.getEstado().toUpperCase());
+                    predicates.add(cb.equal(root.get("estado"), estadoEnum));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+
+            // Filtro por Rango de Fechas
+            if (filtro.getFechaInicio() != null && filtro.getFechaFin() != null) {
+                predicates.add(cb.between(root.get("fechaPago"), filtro.getFechaInicio(), filtro.getFechaFin()));
+            } else if (filtro.getFechaInicio() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("fechaPago"), filtro.getFechaInicio()));
+            } else if (filtro.getFechaFin() != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("fechaPago"), filtro.getFechaFin()));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Page<Pago> paginaPagos = pagoRepository.findAll(spec, pageable);
+        return paginaPagos.map(this::convertirAResponseDTO);
     }
 }

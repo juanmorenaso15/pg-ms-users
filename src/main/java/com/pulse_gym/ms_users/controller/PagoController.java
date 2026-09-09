@@ -344,4 +344,67 @@ public class PagoController {
                     .body("Error al obtener la información de pagos: " + e.getMessage());
         }
     }
+
+    /**
+     * Endpoint para que un socio descargue el comprobante PDF de su propio pago
+     * validando su identidad mediante el token (email).
+     * 
+     * @param idPago    ID del pago
+     * @param userRol   Rol del usuario autenticado (header "X-User-Rol")
+     * @param userEmail Email del socio autenticado (header "X-User-Email")
+     * @return Archivo PDF del comprobante
+     */
+    @GetMapping(value = "/mi-comprobante/{idPago}/pdf", produces = "application/pdf")
+    public ResponseEntity<byte[]> generarMiComprobantePDF(
+            @PathVariable Long idPago,
+            @RequestHeader(value = "X-User-Rol") String userRol,
+            @RequestHeader(value = "X-User-Email") String userEmail) {
+        try {
+            byte[] pdfBytes = pagoService.generarComprobantePDFPropio(idPago, userRol, userEmail);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "mi-comprobante-pago-" + idPago + ".pdf");
+            headers.setContentLength(pdfBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al generar tu comprobante PDF", e);
+        }
+    }
+
+    /**
+     * Endpoint para filtrar, buscar por referencia/estado/tipo de pago/fechas y paginar 
+     * los pagos (aplicable para vistas de socios o administración).
+     * 
+     * @param filtro    DTO con los criterios de filtrado y paginación
+     * @param userRol   Rol del usuario autenticado (header "X-User-Rol")
+     * @param userEmail Email del usuario autenticado (header "X-User-Email")
+     * @return Página con los pagos filtrados
+     */
+    @PostMapping("/mis-pagos/filtrar-paginado")
+    public ResponseEntity<Page<PagoResponseDTO>> filtrarMisPagosPaginados(
+            @RequestBody FiltroPagosRequestDTO filtro,
+            @RequestHeader(value = "X-User-Rol") String userRol,
+            @RequestHeader(value = "X-User-Email") String userEmail) {
+        try {
+            Page<PagoResponseDTO> pagos = pagoService.filtrarPagosSocioPaginados(filtro, userRol, userEmail);
+            return ResponseEntity.ok(pagos);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+                    "Error al filtrar los pagos paginados", e);
+        }
+    }
 }
