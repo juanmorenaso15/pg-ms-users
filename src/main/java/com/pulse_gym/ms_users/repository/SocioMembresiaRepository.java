@@ -49,11 +49,17 @@ public interface SocioMembresiaRepository extends JpaRepository<SocioMembresia, 
     boolean existsBySocio_IdUsuarioAndEstado(Long idSocio, EnumEstadoSocioMembresia estado);
 
     @Query("SELECT sm FROM SocioMembresia sm " +
-            "WHERE sm.estado IN ('VENCIDA', 'SUSPENDIDA') " +
-            "AND sm.fechaVencimiento >= :fechaInicio " +
-            "AND sm.fechaVencimiento <= :fechaFin")
-    List<SocioMembresia> findMorosos(@Param("fechaInicio") LocalDate fechaInicio,
-            @Param("fechaFin") LocalDate fechaFin);
+       "WHERE sm.estado IN ('VENCIDA', 'SUSPENDIDA') " +
+       "AND sm.fechaVencimiento BETWEEN :fechaInicio AND :fechaFin " +
+       "AND NOT EXISTS (SELECT 1 FROM SocioMembresia sm2 " +
+       "                WHERE sm2.socio.id = sm.socio.id " +
+       "                AND sm2.estado = 'ACTIVA') " +
+       "AND sm.fechaVencimiento = (SELECT MAX(sm3.fechaVencimiento) " +
+       "                            FROM SocioMembresia sm3 " +
+       "                            WHERE sm3.socio.id = sm.socio.id " +
+       "                            AND sm3.estado IN ('VENCIDA', 'SUSPENDIDA'))")
+        List<SocioMembresia> findMorosos(@Param("fechaInicio") LocalDate fechaInicio,
+                                 @Param("fechaFin") LocalDate fechaFin);
 
     @Query("SELECT DISTINCT sm.socio FROM SocioMembresia sm " +
             "WHERE (sm.estado = 'VENCIDA' OR (sm.estado = 'ACTIVA' AND sm.fechaVencimiento < :fechaFin)) " +
