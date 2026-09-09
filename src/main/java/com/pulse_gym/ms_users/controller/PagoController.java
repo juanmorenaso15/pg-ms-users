@@ -1,6 +1,7 @@
 package com.pulse_gym.ms_users.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -21,9 +23,12 @@ import com.pulse_gym.lb_common.dto.AnularPagoRequestDTO;
 import com.pulse_gym.lb_common.dto.FiltroPagosRequestDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.PagoResponseDTO;
+import com.pulse_gym.lb_common.dto.PagoResultResponseDTO;
 import com.pulse_gym.lb_common.dto.PaymentSummaryDTO;
 import com.pulse_gym.lb_common.dto.PreferenceResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistrarPagoRequestDTO;
+import com.pulse_gym.lb_common.dto.SocioDashboardPagosDTO;
+import com.pulse_gym.lb_common.dto.TokenizedPaymentRequestDTO;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_users.service.PagoService;
@@ -261,4 +266,82 @@ public class PagoController {
         }
     }
 
+    /**
+     * Endpoint para recibir notificaciones de pagos desde MercadoPago (webhook).
+     * 
+     * @param payload Mapa con los datos de la notificación enviada por MercadoPago.
+     * @return ResponseEntity con código HTTP 200 si se procesa correctamente, o 500
+     *         en caso de error.
+     */
+    @PostMapping("/webhook/mercadopago")
+    public ResponseEntity<Void> recibirWebhookMercadoPago(
+            @RequestBody Map<String, Object> payload,
+            @RequestHeader(value = "x-signature", required = false) String xSignature,
+            @RequestHeader(value = "x-request-id", required = false) String xRequestId,
+            @RequestParam(value = "data.id", required = false) String dataIdParam) {
+        try {
+            pagoService.procesarNotificacionMercadoPago(payload, xSignature, xRequestId, dataIdParam);
+            return ResponseEntity.ok().build();
+        } catch (SecurityException e) {
+            // Firma inválida: no reintentar en bucle, pero tampoco des-configurar tu app
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Endpoint para procesar un pago tokenizado desde el Payment Brick
+     * (Checkout API). El usuario nunca sale de nuestro dominio.
+     *
+     * @param requestDTO DTO con el token de la tarjeta, método de pago, cuotas y
+     *                   datos del pagador
+     * @param userRol    Rol del usuario autenticado - header "X-User-Rol"
+     * @param userEmail  Email del socio autenticado - header "X-User-Email"
+     * @return DTO con el resultado inmediato del pago (200) o error (400/500)
+     */
+    @PostMapping("/pago-app-token")
+    public ResponseEntity<?> realizarPagoAppConToken(
+            @Valid @RequestBody TokenizedPaymentRequestDTO requestDTO,
+            @RequestHeader(value = "X-User-Rol") String userRol,
+            @RequestHeader(value = "X-User-Email") String userEmail) {
+        try {
+            PagoResultResponseDTO response = pagoService.procesarPagoConTokenApp(requestDTO, userRol, userEmail);
+            return ResponseEntity.ok(response);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Error de validación: " + e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Error al procesar el pago: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Endpoint para que un socio obtenga su historial de pagos desde la app móvil.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol  Rol del usuario autenticado (header)
+     * @param userEmail Email del socio autenticado (header)
+     * @return DTO con el historial de pagos del socio
+     */
+    @GetMapping("/mi-historial-pagos")
+    public ResponseEntity<?> obtenerMiHistorialYPagos(
+            @RequestHeader(value = "X-User-Rol") String userRol,
+            @RequestHeader(value = "X-User-Email") String userEmail) {
+        try {
+            ValidacionDeRoles.validarCualquierRol(userRol);
+            SocioDashboardPagosDTO response = pagoService.obtenerDashboardPagosSocio(userEmail);
+            return ResponseEntity.ok(response);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error al obtener la información de pagos: " + e.getMessage());
+        }
+    }
 }
