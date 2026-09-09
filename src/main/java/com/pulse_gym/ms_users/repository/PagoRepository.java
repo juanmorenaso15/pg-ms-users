@@ -2,6 +2,7 @@ package com.pulse_gym.ms_users.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -9,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.pulse_gym.lb_common.entity.user.Pago;
+import com.pulse_gym.lb_common.enums.EnumEstadoPago;
 import com.pulse_gym.lb_common.enums.EnumMetodoPago;
 
 public interface PagoRepository extends JpaRepository<Pago, Long>, JpaSpecificationExecutor<Pago> {
@@ -59,4 +61,32 @@ public interface PagoRepository extends JpaRepository<Pago, Long>, JpaSpecificat
      * @return Lista de pagos asociados a la membresía
      */
     List<Pago> findBySocioMembresia_IdSocioMembresiaOrderByFechaPagoDesc(Long idSocioMembresia);
+
+    /**
+     * Busca el último pago aprobado de una membresía asignada específica
+     * 
+     * @param idSocioMembresia ID de la membresía asignada
+     * @param estado           Estado del pago (debe ser APROBADO)
+     * @return Último pago aprobado de la membresía, si existe
+     */
+    Optional<Pago> findFirstBySocioMembresia_IdSocioMembresiaAndEstadoOrderByFechaPagoDesc(
+            Long idSocioMembresia, EnumEstadoPago estado);
+
+    
+    /**
+     * Busca un pago por su ID de preferencia en MercadoPago y su estado
+     * 
+     * @param preferenceId ID de la preferencia en MercadoPago
+     * @param estado       Estado del pago (PENDIENTE, APROBADO, RECHAZADO, ANULADO)
+     * @return Pago correspondiente, si existe
+     */
+    Optional<Pago> findByPreferenceIdAndEstado(String preferenceId, EnumEstadoPago estado);
+
+    /**
+     * Busca un pago por su ID de pago en MercadoPago
+     * 
+     * @param paymentIdMp ID del pago en MercadoPago
+     * @return Pago correspondiente, si existe
+     */
+    Optional<Pago> findByPaymentIdMp(String paymentIdMp);
 }
