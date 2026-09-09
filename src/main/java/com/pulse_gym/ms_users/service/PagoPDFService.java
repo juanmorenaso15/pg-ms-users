@@ -38,8 +38,10 @@ public class PagoPDFService {
     private static final DeviceRgb PRIMARY_COLOR = new DeviceRgb(26, 82, 118);  
     private static final DeviceRgb SECONDARY_COLOR = new DeviceRgb(240, 243, 244); 
     private static final DeviceRgb SUCCESS_COLOR = new DeviceRgb(39, 174, 96);    
-    private static final DeviceRgb DANGER_COLOR = new DeviceRgb(192, 57, 43);     
+    private static final DeviceRgb WARNING_COLOR = new DeviceRgb(212, 160, 23);    
+    private static final DeviceRgb DANGER_COLOR = new DeviceRgb(192, 57, 43);      
     private static final DeviceRgb TEXT_DARK = new DeviceRgb(44, 62, 80);         
+
     /**
      * Genera un comprobante de pago rediseñado en formato PDF con logo, estilos modernos y código QR apuntando al Front-End.
      * 
@@ -118,13 +120,19 @@ public class PagoPDFService {
                 addStyledRow(table, "Registrado por:", pago.getNombreAdminRegistro(), true);
             }
 
-            boolean isAnulado = pago.getAnulado() != null && pago.getAnulado();
+            boolean isAnulado = (pago.getAnulado() != null && pago.getAnulado()) || "ANULADO".equalsIgnoreCase(pago.getEstado());
+            boolean isPendiente = "PENDIENTE".equalsIgnoreCase(pago.getEstado());
+            boolean isRechazado = "RECHAZADO".equalsIgnoreCase(pago.getEstado());
+
+            String estadoTexto = isAnulado ? "ANULADO" : (pago.getEstado() != null ? pago.getEstado().toUpperCase() : "APROBADO");
+            DeviceRgb estadoColor = isAnulado || isRechazado ? DANGER_COLOR : (isPendiente ? WARNING_COLOR : SUCCESS_COLOR);
+
             Cell estadoLabelCell = createCell("Estado del Pago:", true, true);
             
-            Paragraph estadoVal = new Paragraph(isAnulado ? "ANULADO" : "APROBADO")
+            Paragraph estadoVal = new Paragraph(estadoTexto)
                     .setBold()
                     .setFontSize(10)
-                    .setFontColor(isAnulado ? DANGER_COLOR : SUCCESS_COLOR);
+                    .setFontColor(estadoColor);
             
             Cell estadoValCell = new Cell().add(estadoVal)
                     .setPadding(6)
