@@ -34,8 +34,7 @@ public class PlanNutricionalController {
     private final PlanNutricionalService planNutricionalService;
 
     /**
-     * 
-     * Genera un plan nutricional personalizado
+     * Genera un plan nutricional personalizado (para entrenadores/admins)
      * 
      * @param request           Datos del socio y preferencias
      * @param userRol           Rol del usuario autenticado (header)
@@ -67,8 +66,41 @@ public class PlanNutricionalController {
     }
 
     /**
+     * Genera un plan nutricional personalizado para el socio autenticado.
+     * El socio NO necesita enviar idSocio, se obtiene del token.
      * 
-     * Obtiene el plan nutricional activo del usuario autenticado
+     * @param request           Preferencias del socio (idSocio es opcional)
+     * @param userRol           Rol del usuario autenticado (header)
+     * @param userIdAutenticado ID del usuario autenticado (header)
+     * @param userEmail         Email del usuario autenticado (header)
+     * @return DTO con el plan nutricional generado
+     */
+    @PostMapping("/mi-plan/generar")
+    public ResponseEntity<PlanNutricionalGeneracionResponseDTO> generarMiPlanNutricional(
+            @Valid @RequestBody PlanNutricionalGeneracionRequestDTO request,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
+        try {
+            PlanNutricionalGeneracionResponseDTO response = planNutricionalService.generarMiPlanNutricional(
+                    request, userRol, userIdAutenticado, userEmail);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al generar tu plan nutricional: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Obtiene el plan nutricional activo del socio autenticado.
+     * El socio solo necesita su token, no necesita enviar idSocio.
      * 
      * @param userRol           Rol del usuario autenticado (header)
      * @param userIdAutenticado ID del usuario autenticado (header)
@@ -82,8 +114,8 @@ public class PlanNutricionalController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
 
         try {
-            PlanNutricionalGeneracionResponseDTO plan = planNutricionalService.obtenerPlanActivo(
-                    userIdAutenticado, userRol, userIdAutenticado, userEmail);
+            PlanNutricionalGeneracionResponseDTO plan = planNutricionalService.obtenerMiPlanActivo(
+                    userRol, userEmail);
             return ResponseEntity.ok(plan);
 
         } catch (SecurityAuthorizationException e) {
@@ -93,13 +125,77 @@ public class PlanNutricionalController {
         } catch (Exception e) {
             e.printStackTrace();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al obtener el plan nutricional", e);
+                    "Error al obtener tu plan nutricional", e);
         }
     }
 
     /**
+     * Ajusta el plan nutricional activo del socio autenticado.
+     * El socio puede ajustar su propio plan usando solo el token.
      * 
-     * Obtiene el plan nutricional activo de un socio específico
+     * @param request   Datos de ajuste del plan
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Mapa con información sobre el ajuste realizado
+     */
+    @PutMapping("/mi-plan/ajustar")
+    public ResponseEntity<Map<String, Object>> ajustarMiPlanNutricional(
+            @Valid @RequestBody PlanNutricionalAjusteRequestDTO request,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
+        try {
+            Map<String, Object> response = planNutricionalService.ajustarMiPlanNutricional(
+                    request, userRol, userIdAutenticado, userEmail);
+            return ResponseEntity.ok(response);
+
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al ajustar tu plan nutricional: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Ajusta un plan nutricional específico (para entrenadores/admins)
+     * 
+     * @param idPlan    ID del plan nutricional a ajustar
+     * @param request   Datos de ajuste del plan
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Mapa con información sobre el ajuste realizado
+     */
+    @PutMapping("/{idPlan}/ajustar")
+    public ResponseEntity<Map<String, Object>> ajustarPlanNutricional(
+            @PathVariable Long idPlan,
+            @Valid @RequestBody PlanNutricionalAjusteRequestDTO request,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
+        try {
+            Map<String, Object> response = planNutricionalService.ajustarPlanNutricional(
+                    idPlan, request, userRol, userIdAutenticado, userEmail);
+            return ResponseEntity.ok(response);
+
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al ajustar el plan nutricional: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Obtiene el plan nutricional activo de un socio específico (para entrenadores/admins)
      * 
      * @param idSocio           ID del socio a consultar
      * @param userRol           Rol del usuario autenticado (header)
@@ -215,39 +311,6 @@ public class PlanNutricionalController {
             e.printStackTrace();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al obtener el plan nutricional", e);
-        }
-    }
-
-    /**
-     * Ajusta un plan nutricional existente
-     * 
-     * @param idPlan    ID del plan nutricional a ajustar
-     * @param request   Datos de ajuste del plan
-     * @param userRol   Rol del usuario autenticado (header)
-     * @param userEmail Email del usuario autenticado (header)
-     * @return Mapa con información sobre el ajuste realizado
-     */
-    @PutMapping("/{idPlan}/ajustar")
-    public ResponseEntity<Map<String, Object>> ajustarPlanNutricional(
-            @PathVariable Long idPlan,
-            @Valid @RequestBody PlanNutricionalAjusteRequestDTO request,
-            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
-            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
-
-        try {
-            Map<String, Object> response = planNutricionalService.ajustarPlanNutricional(
-                    idPlan, request, userRol, userIdAutenticado, userEmail);
-            return ResponseEntity.ok(response);
-
-        } catch (SecurityAuthorizationException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al ajustar el plan nutricional: " + e.getMessage(), e);
         }
     }
 

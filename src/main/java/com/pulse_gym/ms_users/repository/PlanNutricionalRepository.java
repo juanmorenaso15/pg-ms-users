@@ -37,6 +37,7 @@ public interface PlanNutricionalRepository extends JpaRepository<PlanNutricional
 
     /**
      * Busca el plan nutricional activo más reciente de un socio
+     * 
      * @param idSocio ID del socio
      * @return Plan nutricional activo más reciente
      */

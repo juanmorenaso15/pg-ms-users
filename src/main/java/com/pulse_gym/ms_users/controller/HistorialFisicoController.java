@@ -245,17 +245,18 @@ public class HistorialFisicoController {
     }
 
     /**
+     * Obtiene todos los historiales físicos con filtros y paginación
      * 
-     * @param idSocio
-     * @param fechaInicio
-     * @param fechaFin
-     * @param search
-     * @param pagina
-     * @param tamanio
-     * @param sortBy
-     * @param direction
-     * @param userRol
-     * @return
+     * @param idSocio     Filtro por ID del socio
+     * @param fechaInicio Fecha de inicio del rango
+     * @param fechaFin    Fecha de fin del rango
+     * @param busqueda    Búsqueda por texto
+     * @param pagina      Número de página
+     * @param tamanio     Tamaño de página
+     * @param sortBy      Campo por el cual ordenar
+     * @param direction   Dirección de ordenamiento (asc o desc)
+     * @param userRol     Rol del usuario autenticado (header)
+     * @return Página de historiales físicos
      */
     @GetMapping("/paginados")
     public ResponseEntity<Page<HistorialFisicoResponseDTO>> obtenerHistorialesPaginados(
@@ -283,6 +284,15 @@ public class HistorialFisicoController {
         }
     }
 
+    /**
+     * Endpoint para obtener un resumen de las métricas físicas del socio autenticado.
+     * Usa el email del token para identificar al socio.
+     * 
+     * @param userRol Rol del usuario autenticado (header)
+     * @return DTO con el resumen de métricas físicas del socio autenticado
+     * @throws SecurityAuthorizationException Si el usuario no es un socio
+     * @throws RuntimeException               Si no se encuentra el socio
+     */
     @GetMapping("/resumen")
     public ResponseEntity<HistorialResumenDTO> obtenerResumenMetricas(
             @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
