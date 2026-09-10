@@ -26,7 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor 
+@RequiredArgsConstructor
 public class PagoPDFService {
 
     /** Formateador de fecha para el comprobante */
@@ -35,15 +35,27 @@ public class PagoPDFService {
     /** Servicio para generación de códigos QR */
     private final QRCodeService qrCodeService;
 
-    private static final DeviceRgb PRIMARY_COLOR = new DeviceRgb(26, 82, 118);  
-    private static final DeviceRgb SECONDARY_COLOR = new DeviceRgb(240, 243, 244); 
-    private static final DeviceRgb SUCCESS_COLOR = new DeviceRgb(39, 174, 96);    
-    private static final DeviceRgb WARNING_COLOR = new DeviceRgb(212, 160, 23);    
-    private static final DeviceRgb DANGER_COLOR = new DeviceRgb(192, 57, 43);      
-    private static final DeviceRgb TEXT_DARK = new DeviceRgb(44, 62, 80);         
+    /** Color primario (azul oscuro) */
+    private static final DeviceRgb PRIMARY_COLOR = new DeviceRgb(26, 82, 118);
+
+    /** Color secundario (gris claro) */
+    private static final DeviceRgb SECONDARY_COLOR = new DeviceRgb(240, 243, 244);
+
+    /** Color para estados de éxito (verde) */
+    private static final DeviceRgb SUCCESS_COLOR = new DeviceRgb(39, 174, 96);
+
+    /** Color para estados de advertencia (amarillo) */
+    private static final DeviceRgb WARNING_COLOR = new DeviceRgb(212, 160, 23);
+
+    /** Color para estados de peligro/error (rojo) */
+    private static final DeviceRgb DANGER_COLOR = new DeviceRgb(192, 57, 43);
+
+    /** Color para texto oscuro */
+    private static final DeviceRgb TEXT_DARK = new DeviceRgb(44, 62, 80);
 
     /**
-     * Genera un comprobante de pago rediseñado en formato PDF con logo, estilos modernos y código QR apuntando al Front-End.
+     * Genera un comprobante de pago rediseñado en formato PDF con logo, estilos
+     * modernos y código QR apuntando al Front-End.
      * 
      * @param pago Datos del pago a incluir en el comprobante
      * @return Array de bytes del PDF generado
@@ -54,7 +66,7 @@ public class PagoPDFService {
             PdfWriter writer = new PdfWriter(outputStream);
             PdfDocument pdfDoc = new PdfDocument(writer);
             Document document = new Document(pdfDoc);
-            
+
             document.setMargins(30, 35, 30, 35);
 
             Table headerTable = new Table(UnitValue.createPercentArray(new float[] { 25, 75 }))
@@ -62,7 +74,7 @@ public class PagoPDFService {
 
             Cell logoCell = new Cell();
             try {
-                InputStream logoStream = getClass().getResourceAsStream("/images/LOGO_OFICIAL.jpg");
+                InputStream logoStream = getClass().getResourceAsStream("/images/logo_sin_fondo_dos.png");
                 if (logoStream != null) {
                     byte[] logoBytes = logoStream.readAllBytes();
                     Image logo = new Image(ImageDataFactory.create(logoBytes));
@@ -101,7 +113,7 @@ public class PagoPDFService {
             Table divider = new Table(1).setWidth(UnitValue.createPercentValue(100));
             divider.addCell(new Cell().setHeight(2).setBackgroundColor(PRIMARY_COLOR).setBorder(null));
             document.add(divider);
-            
+
             document.add(new Paragraph(" ").setFontSize(4));
 
             Table table = new Table(UnitValue.createPercentArray(new float[] { 35, 65 }))
@@ -120,26 +132,29 @@ public class PagoPDFService {
                 addStyledRow(table, "Registrado por:", pago.getNombreAdminRegistro(), true);
             }
 
-            boolean isAnulado = (pago.getAnulado() != null && pago.getAnulado()) || "ANULADO".equalsIgnoreCase(pago.getEstado());
+            boolean isAnulado = (pago.getAnulado() != null && pago.getAnulado())
+                    || "ANULADO".equalsIgnoreCase(pago.getEstado());
             boolean isPendiente = "PENDIENTE".equalsIgnoreCase(pago.getEstado());
             boolean isRechazado = "RECHAZADO".equalsIgnoreCase(pago.getEstado());
 
-            String estadoTexto = isAnulado ? "ANULADO" : (pago.getEstado() != null ? pago.getEstado().toUpperCase() : "APROBADO");
-            DeviceRgb estadoColor = isAnulado || isRechazado ? DANGER_COLOR : (isPendiente ? WARNING_COLOR : SUCCESS_COLOR);
+            String estadoTexto = isAnulado ? "ANULADO"
+                    : (pago.getEstado() != null ? pago.getEstado().toUpperCase() : "APROBADO");
+            DeviceRgb estadoColor = isAnulado || isRechazado ? DANGER_COLOR
+                    : (isPendiente ? WARNING_COLOR : SUCCESS_COLOR);
 
             Cell estadoLabelCell = createCell("Estado del Pago:", true, true);
-            
+
             Paragraph estadoVal = new Paragraph(estadoTexto)
                     .setBold()
                     .setFontSize(10)
                     .setFontColor(estadoColor);
-            
+
             Cell estadoValCell = new Cell().add(estadoVal)
                     .setPadding(6)
                     .setVerticalAlignment(VerticalAlignment.MIDDLE)
                     .setBorder(null)
                     .setBackgroundColor(SECONDARY_COLOR);
-            
+
             table.addCell(estadoLabelCell);
             table.addCell(estadoValCell);
 
@@ -154,7 +169,7 @@ public class PagoPDFService {
                 String qrTargetUrl = "https://front-end-pulsegym.pages.dev/auth/login?idPago=" + pago.getIdPago();
 
                 byte[] qrBytes = qrCodeService.generarQRComprobante(pago.getIdPago());
-                
+
                 Image qrImage = new Image(ImageDataFactory.create(qrBytes));
                 qrImage.scaleToFit(90, 90);
                 qrImage.setHorizontalAlignment(HorizontalAlignment.CENTER);
@@ -243,13 +258,19 @@ public class PagoPDFService {
     }
 
     private String formatMetodoPago(String metodo) {
-        if (metodo == null) return "-";
+        if (metodo == null)
+            return "-";
         switch (metodo) {
-            case "EFECTIVO": return "Efectivo";
-            case "TRANSFERENCIA_BANCOLOMBIA": return "Transferencia Bancolombia";
-            case "TARJETA_CREDITO": return "Tarjeta de Crédito";
-            case "TARJETA_DEBITO": return "Tarjeta de Débito";
-            default: return metodo;
+            case "EFECTIVO":
+                return "Efectivo";
+            case "TRANSFERENCIA_BANCOLOMBIA":
+                return "Transferencia Bancolombia";
+            case "TARJETA_CREDITO":
+                return "Tarjeta de Crédito";
+            case "TARJETA_DEBITO":
+                return "Tarjeta de Débito";
+            default:
+                return metodo;
         }
     }
 }

@@ -2,6 +2,7 @@ package com.pulse_gym.ms_users.service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -1089,10 +1090,11 @@ public class UsuarioPerfilService {
     }
 
     /**
-     * Obtiene usuarios con paginación, filtro por estado y búsqueda
+     * Obtiene usuarios con paginación, filtro por estado, búsqueda y roles
      * 
      * @param estado   Estado del usuario (ACTIVO, INACTIVO, null = todos)
      * @param busqueda Texto de búsqueda (opcional)
+     * @param roles    Roles separados por coma (opcional)
      * @param pageable Configuración de paginación
      * @param userRol  Rol del usuario autenticado
      * @return Página de usuarios
@@ -1124,40 +1126,59 @@ public class UsuarioPerfilService {
 
         String estadoStr = estado != null ? estado.name() : null;
 
-        List<UsuarioPerfil> todosLosUsuarios = usuarioRepository.findUsuariosConFiltrosSinPaginacion(
-                estadoStr,
-                busquedaLimpia,
-                p1,
-                p2,
-                p3);
+        boolean tieneFiltroRoles = (roles != null && !roles.trim().isEmpty());
+        Page<UsuarioPerfil> paginaUsuarios;
 
-        List<UsuarioPerfilResponseDTO> todosFiltrados = todosLosUsuarios.stream()
-                .map(usuario -> {
-                    UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
-                    enrichWithRol(dto, usuario);
-                    return dto;
-                })
-                .filter(dto -> {
-                    if (roles != null && !roles.trim().isEmpty()) {
-                        String[] rolesArray = roles.split(",");
-                        for (String rol : rolesArray) {
-                            if (dto.getRol() != null && dto.getRol().name().equalsIgnoreCase(rol.trim())) {
-                                return true;
-                            }
-                        }
-                        return false;
+        if (tieneFiltroRoles) {
+            String[] rolesArray = roles.split(",");
+            List<Long> userIds = new ArrayList<>();
+            try {
+                List<AuthUserDTO> authUsers = authServiceClient.obtenerTodosLosUsuarios();
+
+                if (authUsers != null) {
+                    List<String> emailsConRol = authUsers.stream()
+                            .filter(u -> u.getRol() != null && java.util.Arrays.stream(rolesArray)
+                                    .anyMatch(r -> r.trim().equalsIgnoreCase(u.getRol().name())))
+                            .map(AuthUserDTO::getEmail)
+                            .collect(Collectors.toList());
+
+                    if (!emailsConRol.isEmpty()) {
+                        userIds = usuarioRepository.findByEmailIn(emailsConRol).stream()
+                                .map(UsuarioPerfil::getIdUsuario)
+                                .collect(Collectors.toList());
                     }
-                    return true;
-                })
-                .collect(Collectors.toList());
+                }
+            } catch (Exception e) {
+                log.warn("No se pudo filtrar por roles consultando el servicio de Auth: {}", e.getMessage());
+            }
 
-        int start = (int) pageable.getOffset();
-        int end = Math.min(start + pageable.getPageSize(), todosFiltrados.size());
+            if (userIds.isEmpty()) {
+                return new PageImpl<>(List.of(), pageable, 0);
+            }
 
-        List<UsuarioPerfilResponseDTO> pageContent = todosFiltrados.subList(
-                Math.min(start, todosFiltrados.size()),
-                end > start ? end : start);
+            paginaUsuarios = usuarioRepository.findUsuariosConFiltrosYRoles(
+                    estadoStr,
+                    busquedaLimpia,
+                    p1,
+                    p2,
+                    p3,
+                    userIds,
+                    pageable);
 
-        return new PageImpl<>(pageContent, pageable, todosFiltrados.size());
+        } else {
+            paginaUsuarios = usuarioRepository.findUsuariosConFiltrosSinRoles(
+                    estadoStr,
+                    busquedaLimpia,
+                    p1,
+                    p2,
+                    p3,
+                    pageable);
+        }
+
+        return paginaUsuarios.map(usuario -> {
+            UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
+            enrichWithRol(dto, usuario);
+            return dto;
+        });
     }
 }

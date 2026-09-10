@@ -768,4 +768,30 @@ private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina deta
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Obtiene la última rutina generada del socio autenticado
+     * 
+     * @param userIdAutenticado ID del usuario autenticado
+     * @param userRol           Rol del usuario
+     * @param userEmail         Email del usuario
+     * @return DTO de la última rutina generada
+     */
+    public RutinaGeneracionResponseDTO obtenerUltimaRutina(Long userIdAutenticado, String userRol, String userEmail) {
+        Long idSocio;
+
+        if (EnumRol.socio.name().equals(userRol)) {
+            UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+            idSocio = socio.getIdUsuario();
+            log.info("Socio autenticado por email: {}, ID en usuario_perfil: {}", userEmail, idSocio);
+        } else {
+            idSocio = userIdAutenticado;
+        }
+
+        RutinaIA ultimaRutina = rutinaRepository.findFirstBySocio_IdUsuarioOrderByFechaGeneracionDesc(idSocio)
+                .orElseThrow(() -> new RuntimeException("El socio no tiene ninguna rutina generada"));
+
+        return convertirAResponseDTO(ultimaRutina);
+    }
+
 }
