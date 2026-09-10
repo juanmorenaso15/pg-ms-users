@@ -77,4 +77,12 @@ public interface RutinaRepository extends JpaRepository<RutinaIA, Long> {
      * @return Lista de rutinas activas
      */
     List<RutinaIA> findByActivaTrue();
+
+    /**
+     * Busca la última rutina generada de un socio (la más reciente)
+     * 
+     * @param idSocio ID del socio
+     * @return Optional con la rutina más reciente
+     */
+    Optional<RutinaIA> findFirstBySocio_IdUsuarioOrderByFechaGeneracionDesc(Long idSocio);
 }

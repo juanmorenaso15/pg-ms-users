@@ -9,6 +9,8 @@ import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
+import com.itextpdf.io.image.ImageData;
+import com.itextpdf.io.image.ImageDataFactory;
 import com.itextpdf.kernel.colors.Color;
 import com.itextpdf.kernel.colors.DeviceRgb;
 import com.itextpdf.kernel.font.PdfFont;
@@ -18,7 +20,9 @@ import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.layout.Document;
 import com.itextpdf.layout.borders.Border;
+import com.itextpdf.layout.borders.SolidBorder;
 import com.itextpdf.layout.element.Cell;
+import com.itextpdf.layout.element.Image;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.properties.TextAlignment;
@@ -36,533 +40,390 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ExportacionPdfService {
 
-    /** Color primario azul corporativo */
-    private static final Color COLOR_PRIMARIO = new DeviceRgb(0, 102, 204);
+    /** Color primario azul corporativo moderno (Pulse Gym) */
+    private static final Color COLOR_PRIMARIO = new DeviceRgb(15, 23, 42);
 
-    /** Color secundario para fondos */
-    private static final Color COLOR_SECUNDARIO = new DeviceRgb(240, 245, 250);
+    /** Color de acento para cabeceras y títulos destacados */
+    private static final Color COLOR_ACENTO = new DeviceRgb(0, 102, 204);
 
-    /** Color para bordes */
-    private static final Color COLOR_BORDE = new DeviceRgb(200, 200, 200);
+    /** Color secundario para fondos de tarjetas */
+    private static final Color COLOR_SECUNDARIO = new DeviceRgb(248, 250, 252);
+
+    /** Color para bordes sutiles estilo UI */
+    private static final Color COLOR_BORDE = new DeviceRgb(226, 232, 240);
 
     /**
-     * Exporta una rutina a formato PDF
-     * 
-     * @param rutina DTO con los datos de la rutina a exportar
-     * @return Array de bytes del PDF generado
-     * @throws IOException Si ocurre un error al generar el PDF
+     * Exporta una rutina a formato PDF con un diseño moderno tipo Dashboard Web
      */
     public byte[] exportarRutinaPdf(RutinaExportacionDTO rutina) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         PdfWriter writer = new PdfWriter(baos);
         PdfDocument pdfDoc = new PdfDocument(writer);
         Document document = new Document(pdfDoc, PageSize.A4);
-        document.setMargins(40, 40, 40, 40);
+        document.setMargins(30, 30, 30, 30);
 
-        PdfFont fontTitulo = PdfFontFactory.createFont();
-        PdfFont fontSubtitulo = PdfFontFactory.createFont();
         PdfFont fontNormal = PdfFontFactory.createFont();
 
-        Paragraph titulo = new Paragraph("PULSE GYM - RUTINA DE ENTRENAMIENTO")
-                .setFont(fontTitulo)
-                .setFontSize(20)
-                .setBold()
-                .setTextAlignment(TextAlignment.CENTER)
-                .setFontColor(COLOR_PRIMARIO);
-        document.add(titulo);
-
-        document.add(new Paragraph(" ").setBorderBottom(Border.NO_BORDER));
-
-        Table headerTable = new Table(UnitValue.createPercentArray(new float[] { 1, 2 }))
+        Table mainHeader = new Table(new float[] { 1f, 3.5f, 2f })
                 .setWidth(UnitValue.createPercentValue(100))
-                .setMarginBottom(20);
+                .setMarginBottom(12);
 
-        Cell cellLabel = new Cell();
-        cellLabel.add(new Paragraph("Socio:").setBold().setFont(fontNormal));
-        cellLabel.add(new Paragraph("Email:").setBold().setFont(fontNormal));
-        cellLabel.add(new Paragraph("Fecha:").setBold().setFont(fontNormal));
-        cellLabel.add(new Paragraph("Versión:").setBold().setFont(fontNormal));
-        cellLabel.setBorder(Border.NO_BORDER);
-        cellLabel.setWidth(UnitValue.createPercentValue(30));
-        headerTable.addCell(cellLabel);
-
-        Cell cellValue = new Cell();
-        cellValue.add(new Paragraph(rutina.getNombreSocio() + " " + rutina.getApellidoSocio()));
-        cellValue.add(new Paragraph(rutina.getEmailSocio()));
-        cellValue.add(new Paragraph(rutina.getFechaGeneracion()
-                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));
-        cellValue.add(new Paragraph(rutina.getVersion() != null ? "v" + rutina.getVersion() : "v1"));
-        cellValue.setBorder(Border.NO_BORDER);
-        headerTable.addCell(cellValue);
-
-        document.add(headerTable);
-
-        if (rutina.getModificadoPor() != null && !rutina.getModificadoPor().isEmpty()) {
-            document.add(new Paragraph(" ")
-                    .setBorderBottom(Border.NO_BORDER)
-                    .setMarginTop(0));
-
-            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
-                    .setWidth(UnitValue.createPercentValue(100))
-                    .setMarginBottom(10);
-
-            Cell modLabel = new Cell();
-            modLabel.add(new Paragraph("Última modificación:").setBold().setFontSize(10));
-            modLabel.setBorder(Border.NO_BORDER);
-            modLabel.setWidth(UnitValue.createPercentValue(25));
-            modTable.addCell(modLabel);
-
-            String modInfo = "Por: " + rutina.getModificadoPor();
-            if (rutina.getFechaModificacion() != null) {
-                modInfo += " | Fecha: " + rutina.getFechaModificacion()
-                        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
-            }
-            if (rutina.getMotivoModificacion() != null && !rutina.getMotivoModificacion().isEmpty()) {
-                modInfo += " | Motivo: " + rutina.getMotivoModificacion();
-            }
-            Cell modValue = new Cell();
-            modValue.add(new Paragraph(modInfo).setFontSize(10).setFontColor(new DeviceRgb(80, 80, 80)));
-            modValue.setBorder(Border.NO_BORDER);
-            modTable.addCell(modValue);
-
-            document.add(modTable);
-        } else {
-            document.add(new Paragraph(" ")
-                    .setBorderBottom(Border.NO_BORDER)
-                    .setMarginTop(0));
-
-            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
-                    .setWidth(UnitValue.createPercentValue(100))
-                    .setMarginBottom(10);
-
-            Cell modLabel = new Cell();
-            modLabel.add(new Paragraph("Estado:").setBold().setFontSize(10));
-            modLabel.setBorder(Border.NO_BORDER);
-            modLabel.setWidth(UnitValue.createPercentValue(25));
-            modTable.addCell(modLabel);
-
-            Cell modValue = new Cell();
-            modValue.add(new Paragraph("Rutina original - Sin modificaciones").setFontSize(10)
-                    .setFontColor(new DeviceRgb(80, 80, 80)));
-            modValue.setBorder(Border.NO_BORDER);
-            modTable.addCell(modValue);
-
-            document.add(modTable);
+        Cell logoCell = new Cell().setBorder(Border.NO_BORDER);
+        try {
+            String logoPath = getClass().getResource("/images/logo_sin_fondo_dos.png").toString();
+            ImageData imageData = ImageDataFactory.create(logoPath);
+            Image logo = new Image(imageData);
+            logo.scaleToFit(100, 100);
+            logoCell.add(logo);
+        } catch (Exception e) {
+            logoCell.add(new Paragraph("[PULSE GYM]").setFont(fontNormal).setFontSize(9).setBold()
+                    .setFontColor(COLOR_ACENTO));
+            log.warn("No se pudo cargar el logo de Pulse Gym: {}", e.getMessage());
         }
+        mainHeader.addCell(logoCell);
 
-        document.add(new Paragraph("DESCRIPCIÓN")
-                .setFont(fontSubtitulo)
-                .setFontSize(14)
-                .setBold()
-                .setFontColor(COLOR_PRIMARIO)
-                .setMarginTop(10));
+        Cell titleCell = new Cell().setBorder(Border.NO_BORDER);
+        titleCell.add(
+                new Paragraph("PULSE GYM").setFont(fontNormal).setFontSize(16).setBold().setFontColor(COLOR_PRIMARIO));
+        titleCell.add(
+                new Paragraph(rutina.getNombre() != null ? rutina.getNombre().toUpperCase() : "RUTINA DE ENTRENAMIENTO")
+                        .setFont(fontNormal).setFontSize(9).setBold().setFontColor(COLOR_ACENTO));
+        mainHeader.addCell(titleCell);
 
-        document.add(new Paragraph(
-                rutina.getDescripcion() != null ? rutina.getDescripcion() : "Sin descripción")
-                .setFont(fontNormal)
-                .setFontSize(11)
-                .setMarginBottom(10));
+        Cell metaCell = new Cell().setBorder(Border.NO_BORDER).setTextAlignment(TextAlignment.RIGHT);
+        metaCell.add(new Paragraph("Versión: " + (rutina.getVersion() != null ? "v" + rutina.getVersion() : "v1"))
+                .setFont(fontNormal).setFontSize(9).setBold().setFontColor(COLOR_PRIMARIO));
+        metaCell.add(new Paragraph(rutina.getFechaGeneracion().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                .setFont(fontNormal).setFontSize(8).setFontColor(new DeviceRgb(100, 116, 139)));
+        mainHeader.addCell(metaCell);
+
+        document.add(mainHeader);
+
+        Table infoCard = new Table(new float[] { 1f, 1f })
+                .setWidth(UnitValue.createPercentValue(100))
+                .setMarginBottom(12);
+
+        Cell socioBox = new Cell()
+                .setBackgroundColor(COLOR_SECUNDARIO)
+                .setBorder(new SolidBorder(COLOR_BORDE, 1))
+                .setPadding(8);
+        socioBox.add(new Paragraph("SOCIO ASIGNADO").setFont(fontNormal).setFontSize(8).setBold()
+                .setFontColor(COLOR_ACENTO));
+        socioBox.add(new Paragraph(rutina.getNombreSocio() + " " + rutina.getApellidoSocio()).setFont(fontNormal)
+                .setFontSize(9).setBold());
+        socioBox.add(new Paragraph(rutina.getEmailSocio()).setFont(fontNormal).setFontSize(8)
+                .setFontColor(new DeviceRgb(100, 116, 139)));
+        infoCard.addCell(socioBox);
+
+        Cell auditBox = new Cell()
+                .setBackgroundColor(COLOR_SECUNDARIO)
+                .setBorder(new SolidBorder(COLOR_BORDE, 1))
+                .setPadding(8);
+        auditBox.add(new Paragraph("ESTADO Y MODIFICACIÓN").setFont(fontNormal).setFontSize(8).setBold()
+                .setFontColor(COLOR_ACENTO));
+        if (rutina.getModificadoPor() != null && !rutina.getModificadoPor().isEmpty()) {
+            auditBox.add(new Paragraph("Modificado por: " + rutina.getModificadoPor()).setFont(fontNormal)
+                    .setFontSize(8.5f));
+            auditBox.add(new Paragraph("Motivo: "
+                    + (rutina.getMotivoModificacion() != null ? rutina.getMotivoModificacion() : "Ajuste manual"))
+                    .setFont(fontNormal).setFontSize(8).setFontColor(new DeviceRgb(100, 116, 139)));
+        } else {
+            auditBox.add(new Paragraph("Rutina original generada por IA").setFont(fontNormal).setFontSize(8.5f));
+            auditBox.add(new Paragraph("Sin modificaciones posteriores").setFont(fontNormal).setFontSize(8)
+                    .setFontColor(new DeviceRgb(100, 116, 139)));
+        }
+        infoCard.addCell(auditBox);
+
+        document.add(infoCard);
+
+        if (rutina.getDescripcion() != null && !rutina.getDescripcion().isEmpty()) {
+            document.add(crearTarjetaNota("DESCRIPCIÓN DE LA RUTINA", rutina.getDescripcion(), fontNormal));
+        }
 
         if (rutina.getExplicacionIA() != null && !rutina.getExplicacionIA().isEmpty()) {
-            document.add(new Paragraph("EXPLICACIÓN DE LA IA")
-                    .setFont(fontSubtitulo)
-                    .setFontSize(14)
-                    .setBold()
-                    .setFontColor(COLOR_PRIMARIO)
-                    .setMarginTop(10));
-
-            document.add(new Paragraph(rutina.getExplicacionIA())
-                    .setFont(fontNormal)
-                    .setFontSize(11)
-                    .setItalic()
-                    .setMarginBottom(10));
+            document.add(crearTarjetaNota("EXPLICACIÓN DE LA IA", rutina.getExplicacionIA(), fontNormal));
         }
 
-        document.add(new Paragraph("EJERCICIOS")
-                .setFont(fontSubtitulo)
-                .setFontSize(14)
-                .setBold()
-                .setFontColor(COLOR_PRIMARIO)
-                .setMarginTop(15));
+        document.add(new Paragraph("EJERCICIOS DETALLADOS")
+                .setFont(fontNormal).setFontSize(11).setBold().setFontColor(COLOR_PRIMARIO).setMarginTop(8)
+                .setMarginBottom(6));
 
-        float[] columnWidths = { 0.5f, 2f, 1f, 1f, 0.8f, 0.8f, 1f, 1f, 1f, 1f };
-        Table table = new Table(UnitValue.createPercentArray(columnWidths))
-                .setWidth(UnitValue.createPercentValue(100))
-                .setMarginTop(5);
-
-        String[] headers = { "#", "Ejercicio", "Grupo", "Equipo", "Día", "Series", "Reps", "Peso", "Descanso",
-                "Notas" };
-        for (String header : headers) {
-            Cell headerCell = new Cell()
-                    .add(new Paragraph(header).setBold().setFontSize(9))
-                    .setBackgroundColor(COLOR_PRIMARIO)
-                    .setFontColor(DeviceRgb.WHITE)
-                    .setTextAlignment(TextAlignment.CENTER)
-                    .setPadding(5);
-            table.addCell(headerCell);
-        }
-
-        if (rutina.getDetalles() != null) {
+        if (rutina.getDetalles() != null && !rutina.getDetalles().isEmpty()) {
             int orden = 1;
             for (DetalleRutinaExportacionDTO detalle : rutina.getDetalles()) {
-                table.addCell(createCell(String.valueOf(orden), TextAlignment.CENTER, 9));
-                table.addCell(createCell(detalle.getNombreEjercicio(), TextAlignment.LEFT, 9));
-                table.addCell(createCell(detalle.getGrupoMuscular(), TextAlignment.CENTER, 9));
-                table.addCell(createCell(
-                        detalle.getEquipoRequerido() != null
-                                && !detalle.getEquipoRequerido().isEmpty()
-                                        ? detalle.getEquipoRequerido()
-                                        : "Sin equipo",
-                        TextAlignment.CENTER, 9));
+                Table ejercicioCard = new Table(new float[] { 1f })
+                        .setWidth(UnitValue.createPercentValue(100))
+                        .setMarginBottom(6);
 
-                String dia = detalle.getDiaSemana() != null ? "Día " + detalle.getDiaSemana() : "-";
-                table.addCell(createCell(dia, TextAlignment.CENTER, 9));
+                Cell cell = new Cell()
+                        .setBackgroundColor(COLOR_SECUNDARIO)
+                        .setBorderLeft(new SolidBorder(COLOR_ACENTO, 3))
+                        .setBorderTop(new SolidBorder(COLOR_BORDE, 1))
+                        .setBorderRight(new SolidBorder(COLOR_BORDE, 1))
+                        .setBorderBottom(new SolidBorder(COLOR_BORDE, 1))
+                        .setPadding(6);
 
-                table.addCell(createCell(
-                        detalle.getSeries() != null ? String.valueOf(detalle.getSeries()) : "-",
-                        TextAlignment.CENTER, 9));
+                String tituloEjercicio = orden + ". " + detalle.getNombreEjercicio() +
+                        (detalle.getGrupoMuscular() != null ? " (" + detalle.getGrupoMuscular().toUpperCase() + ")"
+                                : "");
+                cell.add(new Paragraph(tituloEjercicio).setFont(fontNormal).setFontSize(9.5f).setBold()
+                        .setFontColor(COLOR_PRIMARIO));
 
-                String reps = "";
+                String repsText = "-";
                 if (detalle.getRepeticionesMin() != null && detalle.getRepeticionesMax() != null) {
-                    reps = detalle.getRepeticionesMin() + " - " + detalle.getRepeticionesMax();
+                    repsText = detalle.getRepeticionesMin() + " - " + detalle.getRepeticionesMax() + " reps";
                 } else if (detalle.getRepeticionesMin() != null) {
-                    reps = String.valueOf(detalle.getRepeticionesMin());
-                } else {
-                    reps = "-";
+                    repsText = detalle.getRepeticionesMin() + " reps";
                 }
-                table.addCell(createCell(reps, TextAlignment.CENTER, 9));
 
-                table.addCell(createCell(
-                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg"
-                                : "-",
-                        TextAlignment.CENTER, 9));
+                String infoTecnica = String.format(
+                        "Series: %s   |   Reps: %s   |   Peso: %s   |   Descanso: %s   |   Día: %s",
+                        detalle.getSeries() != null ? detalle.getSeries() : "-",
+                        repsText,
+                        detalle.getPesoSugerido() != null ? detalle.getPesoSugerido() + " kg" : "Libre",
+                        detalle.getDescansoSegundos() != null ? detalle.getDescansoSegundos() + "s" : "-",
+                        detalle.getDiaSemana() != null ? "Día " + detalle.getDiaSemana() : "-");
 
-                table.addCell(createCell(
-                        detalle.getDescansoSegundos() != null
-                                ? detalle.getDescansoSegundos() + "s"
-                                : "-",
-                        TextAlignment.CENTER, 9));
+                cell.add(new Paragraph(infoTecnica).setFont(fontNormal).setFontSize(8.5f).setFontColor(COLOR_ACENTO)
+                        .setMarginTop(2));
 
-                table.addCell(createCell(
-                        detalle.getNotas() != null && !detalle.getNotas().isEmpty()
-                                ? detalle.getNotas()
-                                : "-",
-                        TextAlignment.LEFT, 8));
+                if (detalle.getEquipoRequerido() != null && !detalle.getEquipoRequerido().isEmpty()) {
+                    cell.add(new Paragraph("Equipamiento: " + detalle.getEquipoRequerido()).setFont(fontNormal)
+                            .setFontSize(8).setFontColor(new DeviceRgb(100, 116, 139)));
+                }
 
+                if (detalle.getNotas() != null && !detalle.getNotas().isEmpty()) {
+                    cell.add(new Paragraph("💡 " + detalle.getNotas()).setFont(fontNormal).setFontSize(8).setItalic()
+                            .setFontColor(new DeviceRgb(71, 85, 105)).setMarginTop(2));
+                }
+
+                ejercicioCard.addCell(cell);
+                document.add(ejercicioCard);
                 orden++;
             }
+        } else {
+            document.add(new Paragraph("No hay ejercicios registrados en esta rutina.").setFont(fontNormal)
+                    .setFontSize(9).setFontColor(new DeviceRgb(150, 150, 150)));
         }
 
-        document.add(table);
-
-        document.add(new Paragraph(" ")
-                .setMarginTop(20)
-                .setBorderTop(Border.NO_BORDER));
-
-        document.add(new Paragraph("Generado por PULSE GYM - " + LocalDateTime.now()
-                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")))
-                .setFont(fontNormal)
-                .setFontSize(8)
-                .setTextAlignment(TextAlignment.CENTER)
-                .setFontColor(new DeviceRgb(128, 128, 128)));
-
+        agregarPieDePagina(document, fontNormal);
         document.close();
         return baos.toByteArray();
     }
 
     /**
-     * Crea una celda para la tabla del PDF
-     * 
-     * @param text      Texto de la celda
-     * @param alignment Alineación del texto
-     * @param fontSize  Tamaño de fuente
-     * @return Celda formateada
-     */
-    private Cell createCell(String text, TextAlignment alignment, int fontSize) {
-        return new Cell()
-                .add(new Paragraph(text != null ? text : "-")
-                        .setFontSize(fontSize))
-                .setTextAlignment(alignment)
-                .setPadding(4)
-                .setBorder(Border.NO_BORDER)
-                .setBackgroundColor(DeviceRgb.WHITE);
-    }
-
-    /**
-     * Exporta un plan nutricional a formato PDF
-     * 
-     * @param plan DTO con los datos del plan nutricional a exportar
-     * @return Array de bytes del PDF generado
-     * @throws IOException Si ocurre un error al generar el PDF
+     * Exporta un plan nutricional a formato PDF con un diseño moderno tipo
+     * Dashboard Web
      */
     public byte[] exportarPlanNutricionalPdf(PlanNutricionalExportacionDTO plan) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         PdfWriter writer = new PdfWriter(baos);
         PdfDocument pdfDoc = new PdfDocument(writer);
         Document document = new Document(pdfDoc, PageSize.A4);
-        document.setMargins(40, 40, 40, 40);
+        document.setMargins(30, 30, 30, 30);
 
-        PdfFont fontTitulo = PdfFontFactory.createFont();
-        PdfFont fontSubtitulo = PdfFontFactory.createFont();
         PdfFont fontNormal = PdfFontFactory.createFont();
-        PdfFont fontBold = PdfFontFactory.createFont();
 
-        Paragraph titulo = new Paragraph("PULSE GYM - PLAN NUTRICIONAL")
-                .setFont(fontTitulo)
-                .setFontSize(20)
-                .setBold()
-                .setTextAlignment(TextAlignment.CENTER)
-                .setFontColor(COLOR_PRIMARIO);
-        document.add(titulo);
-
-        document.add(new Paragraph(" ").setBorderBottom(Border.NO_BORDER));
-
-        Table headerTable = new Table(UnitValue.createPercentArray(new float[] { 1, 2 }))
+        Table mainHeader = new Table(new float[] { 1f, 3.5f, 2f })
                 .setWidth(UnitValue.createPercentValue(100))
-                .setMarginBottom(20);
+                .setMarginBottom(12);
 
-        Cell cellLabel = new Cell();
-        cellLabel.add(new Paragraph("Socio:").setBold().setFont(fontNormal));
-        cellLabel.add(new Paragraph("Email:").setBold().setFont(fontNormal));
-        cellLabel.add(new Paragraph("Fecha:").setBold().setFont(fontNormal));
-        cellLabel.add(new Paragraph("Versión:").setBold().setFont(fontNormal));
-        cellLabel.setBorder(Border.NO_BORDER);
-        cellLabel.setWidth(UnitValue.createPercentValue(30));
-        headerTable.addCell(cellLabel);
-
-        Cell cellValue = new Cell();
-        cellValue.add(new Paragraph(plan.getNombreSocio() + " " + plan.getApellidoSocio()));
-        cellValue.add(new Paragraph(plan.getEmailSocio()));
-        cellValue.add(new Paragraph(plan.getFechaGeneracion()
-                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));
-        cellValue.add(new Paragraph(plan.getVersion() != null ? "v" + plan.getVersion() : "v1"));
-        cellValue.setBorder(Border.NO_BORDER);
-        headerTable.addCell(cellValue);
-
-        document.add(headerTable);
-
-        if (plan.getModificadoPor() != null && !plan.getModificadoPor().isEmpty()) {
-            document.add(new Paragraph(" ")
-                    .setBorderBottom(Border.NO_BORDER)
-                    .setMarginTop(0));
-
-            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
-                    .setWidth(UnitValue.createPercentValue(100))
-                    .setMarginBottom(10);
-
-            Cell modLabel = new Cell();
-            modLabel.add(new Paragraph("Última modificación:").setBold().setFontSize(10));
-            modLabel.setBorder(Border.NO_BORDER);
-            modLabel.setWidth(UnitValue.createPercentValue(25));
-            modTable.addCell(modLabel);
-
-            String modInfo = "Por: " + plan.getModificadoPor();
-            if (plan.getFechaModificacion() != null) {
-                modInfo += " | Fecha: " + plan.getFechaModificacion()
-                        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
-            }
-            if (plan.getMotivoModificacion() != null && !plan.getMotivoModificacion().isEmpty()) {
-                modInfo += " | Motivo: " + plan.getMotivoModificacion();
-            }
-            Cell modValue = new Cell();
-            modValue.add(new Paragraph(modInfo).setFontSize(10).setFontColor(new DeviceRgb(80, 80, 80)));
-            modValue.setBorder(Border.NO_BORDER);
-            modTable.addCell(modValue);
-
-            document.add(modTable);
-        } else {
-            document.add(new Paragraph(" ")
-                    .setBorderBottom(Border.NO_BORDER)
-                    .setMarginTop(0));
-
-            Table modTable = new Table(UnitValue.createPercentArray(new float[] { 1, 3 }))
-                    .setWidth(UnitValue.createPercentValue(100))
-                    .setMarginBottom(10);
-
-            Cell modLabel = new Cell();
-            modLabel.add(new Paragraph("Estado:").setBold().setFontSize(10));
-            modLabel.setBorder(Border.NO_BORDER);
-            modLabel.setWidth(UnitValue.createPercentValue(25));
-            modTable.addCell(modLabel);
-
-            Cell modValue = new Cell();
-            modValue.add(new Paragraph("Plan original - Sin modificaciones").setFontSize(10)
-                    .setFontColor(new DeviceRgb(80, 80, 80)));
-            modValue.setBorder(Border.NO_BORDER);
-            modTable.addCell(modValue);
-
-            document.add(modTable);
+        Cell logoCell = new Cell().setBorder(Border.NO_BORDER);
+        try {
+            String logoPath = getClass().getResource("/images/logo_sin_fondo_dos.png").toString();
+            ImageData imageData = ImageDataFactory.create(logoPath);
+            Image logo = new Image(imageData);
+            logo.scaleToFit(100, 100);
+            logoCell.add(logo);
+        } catch (Exception e) {
+            logoCell.add(new Paragraph("[PULSE GYM]").setFont(fontNormal).setFontSize(9).setBold()
+                    .setFontColor(COLOR_ACENTO));
+            log.warn("No se pudo cargar el logo de Pulse Gym: {}", e.getMessage());
         }
+        mainHeader.addCell(logoCell);
 
-        document.add(new Paragraph("RESUMEN NUTRICIONAL DIARIO")
-                .setFont(fontSubtitulo)
-                .setFontSize(14)
-                .setBold()
-                .setFontColor(COLOR_PRIMARIO)
-                .setMarginTop(10));
+        Cell titleCell = new Cell().setBorder(Border.NO_BORDER);
+        titleCell.add(
+                new Paragraph("PULSE GYM").setFont(fontNormal).setFontSize(16).setBold().setFontColor(COLOR_PRIMARIO));
+        titleCell.add(new Paragraph("PLAN NUTRICIONAL Y MACRONUTRIENTES").setFont(fontNormal).setFontSize(9).setBold()
+                .setFontColor(COLOR_ACENTO));
+        mainHeader.addCell(titleCell);
 
-        Table resumenTable = new Table(UnitValue.createPercentArray(new float[] { 1, 1, 1, 1 }))
+        Cell metaCell = new Cell().setBorder(Border.NO_BORDER).setTextAlignment(TextAlignment.RIGHT);
+        metaCell.add(new Paragraph("Versión: " + (plan.getVersion() != null ? "v" + plan.getVersion() : "v1"))
+                .setFont(fontNormal).setFontSize(9).setBold().setFontColor(COLOR_PRIMARIO));
+        metaCell.add(new Paragraph(plan.getFechaGeneracion().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                .setFont(fontNormal).setFontSize(8).setFontColor(new DeviceRgb(100, 116, 139)));
+        mainHeader.addCell(metaCell);
+
+        document.add(mainHeader);
+
+        Table infoCard = new Table(new float[] { 1f, 1f })
                 .setWidth(UnitValue.createPercentValue(100))
-                .setMarginTop(5);
+                .setMarginBottom(12);
 
-        String[] resumenHeaders = { "Calorías", "Proteínas", "Carbohidratos", "Grasas" };
-        for (String header : resumenHeaders) {
-            Cell headerCell = new Cell()
-                    .add(new Paragraph(header).setBold().setFontSize(10))
-                    .setBackgroundColor(COLOR_PRIMARIO)
-                    .setFontColor(DeviceRgb.WHITE)
-                    .setTextAlignment(TextAlignment.CENTER)
-                    .setPadding(5);
-            resumenTable.addCell(headerCell);
-        }
+        Cell socioBox = new Cell()
+                .setBackgroundColor(COLOR_SECUNDARIO)
+                .setBorder(new SolidBorder(COLOR_BORDE, 1))
+                .setPadding(8);
+        socioBox.add(new Paragraph("SOCIO ASIGNADO").setFont(fontNormal).setFontSize(8).setBold()
+                .setFontColor(COLOR_ACENTO));
+        socioBox.add(new Paragraph(plan.getNombreSocio() + " " + plan.getApellidoSocio()).setFont(fontNormal)
+                .setFontSize(9).setBold());
+        socioBox.add(new Paragraph(plan.getEmailSocio()).setFont(fontNormal).setFontSize(8)
+                .setFontColor(new DeviceRgb(100, 116, 139)));
+        infoCard.addCell(socioBox);
 
-        resumenTable.addCell(createCell(
-                plan.getCaloriasDiarias() != null ? plan.getCaloriasDiarias() + " kcal" : "-",
-                TextAlignment.CENTER, 10));
-        resumenTable.addCell(createCell(
-                plan.getProteinasG() != null ? String.format("%.1fg", plan.getProteinasG()) : "-",
-                TextAlignment.CENTER, 10));
-        resumenTable.addCell(createCell(
-                plan.getCarbohidratosG() != null ? String.format("%.1fg", plan.getCarbohidratosG())
-                        : "-",
-                TextAlignment.CENTER, 10));
-        resumenTable.addCell(createCell(
-                plan.getGrasasG() != null ? String.format("%.1fg", plan.getGrasasG()) : "-",
-                TextAlignment.CENTER, 10));
+        Cell restBox = new Cell()
+                .setBackgroundColor(COLOR_SECUNDARIO)
+                .setBorder(new SolidBorder(COLOR_BORDE, 1))
+                .setPadding(8);
+        restBox.add(new Paragraph("RESTRICCIONES DIETÉTICAS").setFont(fontNormal).setFontSize(8).setBold()
+                .setFontColor(COLOR_ACENTO));
+        restBox.add(new Paragraph(
+                plan.getRestriccionesDieteticas() != null ? plan.getRestriccionesDieteticas() : "Sin restricciones")
+                .setFont(fontNormal).setFontSize(8.5f));
+        infoCard.addCell(restBox);
 
-        document.add(resumenTable);
+        document.add(infoCard);
 
-        if (plan.getRestriccionesDieteticas() != null && !plan.getRestriccionesDieteticas().isEmpty()) {
-            document.add(new Paragraph("Restricciones: " + plan.getRestriccionesDieteticas())
-                    .setFont(fontNormal)
-                    .setFontSize(10)
-                    .setMarginTop(5)
-                    .setFontColor(new DeviceRgb(100, 100, 100)));
-        }
+        Table macrosGrid = new Table(UnitValue.createPercentArray(new float[] { 1, 1, 1, 1 }))
+                .setWidth(UnitValue.createPercentValue(100))
+                .setMarginBottom(12);
 
-        document.add(new Paragraph(" "));
+        macrosGrid.addCell(crearCajaMacro("CALORÍAS",
+                plan.getCaloriasDiarias() != null ? plan.getCaloriasDiarias() + " kcal" : "-", fontNormal));
+        macrosGrid.addCell(crearCajaMacro("PROTEÍNAS",
+                plan.getProteinasG() != null ? String.format("%.1fg", plan.getProteinasG()) : "-", fontNormal));
+        macrosGrid.addCell(crearCajaMacro("CARBOHIDRATOS",
+                plan.getCarbohidratosG() != null ? String.format("%.1fg", plan.getCarbohidratosG()) : "-", fontNormal));
+        macrosGrid.addCell(crearCajaMacro("GRASAS",
+                plan.getGrasasG() != null ? String.format("%.1fg", plan.getGrasasG()) : "-", fontNormal));
+
+        document.add(macrosGrid);
 
         if (plan.getExplicacionIA() != null && !plan.getExplicacionIA().isEmpty()) {
-            document.add(new Paragraph("EXPLICACIÓN DE LA IA")
-                    .setFont(fontSubtitulo)
-                    .setFontSize(14)
-                    .setBold()
-                    .setFontColor(COLOR_PRIMARIO)
-                    .setMarginTop(10));
-
-            document.add(new Paragraph(plan.getExplicacionIA())
-                    .setFont(fontNormal)
-                    .setFontSize(10)
-                    .setItalic()
-                    .setMarginBottom(10));
+            document.add(crearTarjetaNota("ESTRATEGIA NUTRICIONAL (IA)", plan.getExplicacionIA(), fontNormal));
         }
 
-        document.add(new Paragraph("SUGERENCIAS DE COMIDAS")
-                .setFont(fontSubtitulo)
-                .setFontSize(14)
-                .setBold()
-                .setFontColor(COLOR_PRIMARIO)
-                .setMarginTop(15));
+        document.add(new Paragraph("PLAN DE COMIDAS SUGERIDO")
+                .setFont(fontNormal).setFontSize(11).setBold().setFontColor(COLOR_PRIMARIO).setMarginTop(8)
+                .setMarginBottom(6));
 
         if (plan.getSugerenciasComidas() != null && !plan.getSugerenciasComidas().isEmpty()) {
             String[] ordenComidas = { "desayuno", "colaciones", "almuerzo", "cena" };
             Map<String, String> nombresComidas = Map.of(
-                    "desayuno", "Desayuno",
-                    "colaciones", "Colaciones",
-                    "almuerzo", "Almuerzo",
-                    "cena", "Cena");
+                    "desayuno", "DESAYUNO",
+                    "colaciones", "COLACIONES / SNACKS",
+                    "almuerzo", "ALMUERZO",
+                    "cena", "CENA");
 
             for (String tipo : ordenComidas) {
                 if (plan.getSugerenciasComidas().containsKey(tipo)) {
-                    List<SugerenciaComidaExportacionDTO> comidas = plan.getSugerenciasComidas()
-                            .get(tipo);
+                    List<SugerenciaComidaExportacionDTO> comidas = plan.getSugerenciasComidas().get(tipo);
                     if (comidas != null && !comidas.isEmpty()) {
-                        document.add(new Paragraph(nombresComidas.getOrDefault(tipo, tipo))
-                                .setFont(fontBold)
-                                .setFontSize(12)
-                                .setFontColor(COLOR_PRIMARIO)
-                                .setMarginTop(8));
+                        document.add(new Paragraph(nombresComidas.getOrDefault(tipo, tipo.toUpperCase()))
+                                .setFont(fontNormal).setFontSize(9).setBold().setFontColor(COLOR_ACENTO).setMarginTop(4)
+                                .setMarginBottom(3));
 
                         for (SugerenciaComidaExportacionDTO comida : comidas) {
-                            String nombreCalorias = comida.getNombre() +
-                                    (comida.getCalorias() != null
-                                            ? " (" + comida.getCalorias()
-                                                    + " kcal)"
-                                            : "");
-                            document.add(new Paragraph("  • " + nombreCalorias)
-                                    .setFont(fontBold)
-                                    .setFontSize(10));
+                            Table comidaCard = new Table(new float[] { 1f })
+                                    .setWidth(UnitValue.createPercentValue(100))
+                                    .setMarginBottom(5);
 
-                            String infoNutricional = String.format(
-                                    "    Proteínas: %.1fg | Carbohidratos: %.1fg | Grasas: %.1fg",
-                                    comida.getProteinas() != null
-                                            ? comida.getProteinas()
-                                            : 0.0,
-                                    comida.getCarbohidratos() != null
-                                            ? comida.getCarbohidratos()
-                                            : 0.0,
-                                    comida.getGrasas() != null ? comida.getGrasas()
-                                            : 0.0);
-                            document.add(new Paragraph(infoNutricional)
-                                    .setFont(fontNormal)
-                                    .setFontSize(9)
-                                    .setFontColor(new DeviceRgb(80, 80, 80)));
+                            Cell cell = new Cell()
+                                    .setBackgroundColor(COLOR_SECUNDARIO)
+                                    .setBorder(new SolidBorder(COLOR_BORDE, 1))
+                                    .setPadding(6);
 
-                            if (comida.getIngredientes() != null
-                                    && !comida.getIngredientes().isEmpty()) {
-                                document.add(new Paragraph("    📝 Ingredientes: "
-                                        + comida.getIngredientes())
-                                        .setFont(fontNormal)
-                                        .setFontSize(9)
-                                        .setFontColor(new DeviceRgb(60, 60,
-                                                60)));
+                            String nombreCalorias = (comida.getNombre() != null ? comida.getNombre() : "Opción") +
+                                    (comida.getCalorias() != null ? " (" + comida.getCalorias() + " kcal)" : "");
+
+                            cell.add(new Paragraph(nombreCalorias).setFont(fontNormal).setFontSize(9).setBold()
+                                    .setFontColor(COLOR_PRIMARIO));
+
+                            String macrosComida = String.format(
+                                    "Proteínas: %.1fg  |  Carbohidratos: %.1fg  |  Grasas: %.1fg",
+                                    comida.getProteinas() != null ? comida.getProteinas() : 0.0,
+                                    comida.getCarbohidratos() != null ? comida.getCarbohidratos() : 0.0,
+                                    comida.getGrasas() != null ? comida.getGrasas() : 0.0);
+                            cell.add(new Paragraph(macrosComida).setFont(fontNormal).setFontSize(8)
+                                    .setFontColor(COLOR_ACENTO).setMarginTop(1));
+
+                            if (comida.getIngredientes() != null && !comida.getIngredientes().isEmpty()) {
+                                cell.add(new Paragraph("Ingredientes: " + comida.getIngredientes())
+                                        .setFont(fontNormal).setFontSize(8).setFontColor(new DeviceRgb(71, 85, 105)));
                             }
 
-                            if (comida.getPreparacion() != null
-                                    && !comida.getPreparacion().isEmpty()) {
-                                document.add(new Paragraph("    🔪 Preparación: "
-                                        + comida.getPreparacion())
-                                        .setFont(fontNormal)
-                                        .setFontSize(9)
-                                        .setFontColor(new DeviceRgb(60, 60,
-                                                60)));
+                            if (comida.getPreparacion() != null && !comida.getPreparacion().isEmpty()) {
+                                cell.add(new Paragraph("Preparación: " + comida.getPreparacion()).setFont(fontNormal)
+                                        .setFontSize(8).setFontColor(new DeviceRgb(71, 85, 105)));
                             }
 
-                            if (comida.getDescripcion() != null
-                                    && !comida.getDescripcion().isEmpty()) {
-                                document.add(new Paragraph(
-                                        "    " + comida.getDescripcion())
-                                        .setFont(fontNormal)
-                                        .setFontSize(9)
-                                        .setFontColor(new DeviceRgb(60, 60,
-                                                60)));
-                            }
-
-                            document.add(new Paragraph(" "));
+                            comidaCard.addCell(cell);
+                            document.add(comidaCard);
                         }
                     }
                 }
             }
         } else {
-            document.add(new Paragraph("No hay sugerencias de comidas disponibles para este plan")
-                    .setFont(fontNormal)
-                    .setFontSize(11)
-                    .setTextAlignment(TextAlignment.CENTER)
+            document.add(new Paragraph("No hay sugerencias de comidas disponibles.").setFont(fontNormal).setFontSize(9)
                     .setFontColor(new DeviceRgb(150, 150, 150)));
         }
 
-        document.add(new Paragraph(" ")
-                .setMarginTop(20)
-                .setBorderTop(Border.NO_BORDER));
-
-        document.add(new Paragraph("Generado por PULSE GYM - " + LocalDateTime.now()
-                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")))
-                .setFont(fontNormal)
-                .setFontSize(8)
-                .setTextAlignment(TextAlignment.CENTER)
-                .setFontColor(new DeviceRgb(128, 128, 128)));
-
+        agregarPieDePagina(document, fontNormal);
         document.close();
         return baos.toByteArray();
+    }
+
+    /**
+     * Crea un bloque de tarjeta con borde izquierdo acentuado para notas o
+     * descripciones
+     */
+    private Table crearTarjetaNota(String titulo, String contenido, PdfFont font) {
+        Table table = new Table(new float[] { 1f }).setWidth(UnitValue.createPercentValue(100)).setMarginBottom(8);
+        Cell cell = new Cell()
+                .setBackgroundColor(COLOR_SECUNDARIO)
+                .setBorderLeft(new SolidBorder(COLOR_ACENTO, 3))
+                .setBorderTop(new SolidBorder(COLOR_BORDE, 1))
+                .setBorderRight(new SolidBorder(COLOR_BORDE, 1))
+                .setBorderBottom(new SolidBorder(COLOR_BORDE, 1))
+                .setPadding(6);
+
+        cell.add(new Paragraph(titulo).setFont(font).setFontSize(8.5f).setBold().setFontColor(COLOR_ACENTO));
+        cell.add(new Paragraph(contenido).setFont(font).setFontSize(8.5f).setFontColor(new DeviceRgb(51, 65, 85)));
+        table.addCell(cell);
+        return table;
+    }
+
+    /**
+     * Crea una caja de macronutrientes individual estilo widget web
+     */
+    private Cell crearCajaMacro(String etiqueta, String valor, PdfFont font) {
+        Cell cell = new Cell()
+                .setBackgroundColor(COLOR_SECUNDARIO)
+                .setBorder(new SolidBorder(COLOR_BORDE, 1))
+                .setTextAlignment(TextAlignment.CENTER)
+                .setPadding(6);
+        cell.add(new Paragraph(valor).setFont(font).setFontSize(10).setBold().setFontColor(COLOR_PRIMARIO));
+        cell.add(new Paragraph(etiqueta).setFont(font).setFontSize(7).setBold()
+                .setFontColor(new DeviceRgb(100, 116, 139)));
+        return cell;
+    }
+
+    /**
+     * Agrega pie de página estandarizado
+     */
+    private void agregarPieDePagina(Document document, PdfFont font) {
+        document.add(new Paragraph(" ")
+                .setMarginTop(10)
+                .setBorderTop(new SolidBorder(COLOR_BORDE, 1)));
+
+        document.add(new Paragraph("Generado oficialmente por la plataforma Pulse Gym • "
+                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")))
+                .setFont(font)
+                .setFontSize(7.5f)
+                .setTextAlignment(TextAlignment.CENTER)
+                .setFontColor(new DeviceRgb(148, 163, 184)));
     }
 }

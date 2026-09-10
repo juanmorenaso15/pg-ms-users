@@ -49,14 +49,21 @@ public class SeguimientoController {
      * @param userIdAutenticado ID del usuario autenticado (header)
      * @return Mensaje de confirmación
      */
+    /**
+     * Registra una sesión de entrenamiento realizada por un socio
+     * 
+     * @param request   Datos de la sesión a registrar
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header)
+     * @return Mensaje de confirmación
+     */
     @PostMapping("/sesion")
     public ResponseEntity<SesionResponseDTO> registrarSesion(
             @Valid @RequestBody RegistroSesionRequestDTO request,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
-            log.info("Registrando sesión de entrenamiento para socio ID: {} con email: {}",
-                    request.getIdSocio(), userEmail);
+            log.info("Registrando sesión de entrenamiento para socio autenticado con email: {}", userEmail);
 
             SesionResponseDTO response = seguimientoService.registrarSesion(request, userRol, userEmail);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);

@@ -218,10 +218,6 @@ public class SeguimientoService {
         UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
 
-        if (!socioAutenticado.getIdUsuario().equals(request.getIdSocio())) {
-            throw new SecurityAuthorizationException("No puede registrar sesiones para otro socio");
-        }
-
         SesionEntrenamiento sesion = new SesionEntrenamiento();
         sesion.setSocio(socioAutenticado);
 

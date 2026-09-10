@@ -65,6 +65,36 @@ public class RutinaController {
     }
 
     /**
+     * Obtiene la última rutina generada del usuario autenticado (socio)
+     * 
+     * @param userIdAutenticado ID del usuario autenticado (de auth - header)
+     * @param userRol           Rol del usuario autenticado (header)
+     * @param userEmail         Email del usuario autenticado (header)
+     * @return DTO de la última rutina generada
+     */
+    @GetMapping("/ultima")
+    public ResponseEntity<RutinaGeneracionResponseDTO> obtenerUltimaRutina(
+            @RequestHeader(value = "X-User-Id", required = false) Long userIdAutenticado,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+
+        try {
+            RutinaGeneracionResponseDTO rutina = rutinaService.obtenerUltimaRutina(
+                    userIdAutenticado, userRol, userEmail);
+            return ResponseEntity.ok(rutina);
+
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener la última rutina", e);
+        }
+    }
+
+    /**
      * Obtiene las rutinas del usuario autenticado
      * 
      * @param userIdAutenticado ID del usuario autenticado (de auth - header)
