@@ -4,6 +4,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.pulse_gym.lb_common.client.AuthClient;
 import com.pulse_gym.lb_common.client.AuthServiceClient;
+import com.pulse_gym.lb_common.client.EquipoClient;
 import com.pulse_gym.lb_common.client.NotificacionClient;
 import com.pulse_gym.lb_common.dto.AuthUserDTO;
 import com.pulse_gym.lb_common.dto.CompletarPerfilRequestDTO;
@@ -59,6 +61,8 @@ public class UsuarioPerfilService {
     private final SocioMembresiaService socioMembresiaService;
     private final SocioMembresiaRepository socioMembresiaRepository;
 
+    private  final EquipoClient equipoClient;
+
     /**
      * Convierte una entidad UsuarioPerfil a UsuarioPerfilResponseDTO
      * 
@@ -87,10 +91,37 @@ public class UsuarioPerfilService {
         dto.setObjetivoPrincipal(usuario.getObjetivoPrincipal());
         dto.setNivelExperiencia(usuario.getNivelExperiencia());
         dto.setFechaRegistro(usuario.getFechaRegistro());
-        dto.setIdSede(usuario.getIdSede());
         dto.setEstado(usuario.getEstado());
         dto.setBiometricDeviceId(usuario.getBiometricDeviceId());
+
+        dto.setNombreSede(obtenerNombreSedePorId(usuario.getIdSede()));
+
         return dto;
+    }
+
+    /**
+     * Método auxiliar para obtener el nombre de la sede mediante su ID.
+     * Puedes conectarlo con tu SedeClient o repositorio correspondiente.
+     */
+    private String obtenerNombreSedePorId(Integer idSede) {
+        if (idSede == null) {
+            return "Sin sede asignada";
+        }
+        try {
+            Map<String, Object> response = equipoClient.obtenerSedePorId(idSede.longValue());
+            if (response != null && Boolean.TRUE.equals(response.get("success"))) {
+                @SuppressWarnings("unchecked")
+                java.util.LinkedHashMap<String, Object> dataMap = (java.util.LinkedHashMap<String, Object>) response
+                        .get("data");
+                if (dataMap != null && dataMap.get("nombreSede") != null) {
+                    return (String) dataMap.get("nombreSede");
+                }
+            }
+            return "Sede #" + idSede;
+        } catch (Exception e) {
+            log.warn("No se pudo obtener el nombre de la sede con ID: {}. Error: {}", idSede, e.getMessage());
+            return "Sede Principal #" + idSede;
+        }
     }
 
     /**
