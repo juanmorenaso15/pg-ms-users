@@ -211,7 +211,7 @@ public class PagoPDFService {
                     .setFontColor(new DeviceRgb(127, 140, 141));
             document.add(footer1);
 
-            Paragraph footer2 = new Paragraph("Plataforma web: https://front-end-pulsegym.pages.dev/auth/login")
+            Paragraph footer2 = new Paragraph("Plataforma web: https://front-end-pulsegym.pages.dev")
                     .setFontSize(8)
                     .setBold()
                     .setTextAlignment(TextAlignment.CENTER)
