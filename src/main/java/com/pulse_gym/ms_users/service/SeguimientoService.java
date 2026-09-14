@@ -540,23 +540,59 @@ public class SeguimientoService {
      * @param idSocio ID del socio
      * @return Número de días consecutivos entrenando
      */
+    /**
+     * Calcula la racha acumulada de entrenamientos de un socio.
+     * Permite una tolerancia de hasta 3 días sin entrenar (ej. fines de semana o
+     * festivos)
+     * sin romper la racha, acumulando los días de entrenamiento exitosos.
+     * 
+     * @param idSocio ID del socio
+     * @return Número total de días de racha acumulados bajo los criterios de
+     *         tolerancia
+     */
     private Integer calcularRachaDias(Long idSocio) {
-        LocalDateTime fechaLimite = LocalDateTime.now().minusDays(30);
-        List<SesionEntrenamiento> sesiones = sesionRepository.findSesionesDesdeFecha(idSocio, fechaLimite);
-        if (sesiones.isEmpty())
+
+        List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
+        if (sesiones == null || sesiones.isEmpty()) {
             return 0;
-
-        Set<LocalDate> fechasConSesion = sesiones.stream()
-                .map(s -> s.getFechaSesion().toLocalDate())
-                .collect(Collectors.toSet());
-
-        int racha = 0;
-        LocalDate fechaActual = LocalDate.now();
-        while (fechasConSesion.contains(fechaActual)) {
-            racha++;
-            fechaActual = fechaActual.minusDays(1);
         }
-        return racha;
+
+        List<LocalDate> fechasSesiones = sesiones.stream()
+                .map(s -> s.getFechaSesion().toLocalDate())
+                .distinct()
+                .sorted((a, b) -> b.compareTo(a))
+                .collect(Collectors.toList());
+
+        LocalDate hoy = LocalDate.now();
+        LocalDate ultimaSesion = fechasSesiones.get(0);
+
+        long diasDesdeUltimaSesion = java.time.temporal.ChronoUnit.DAYS.between(ultimaSesion, hoy);
+        if (diasDesdeUltimaSesion > 3) {
+            return 0;
+        }
+
+        int rachaAcumulada = 0;
+        LocalDate fechaEsperada = null;
+
+        for (LocalDate fecha : fechasSesiones) {
+            if (fechaEsperada == null) {
+                rachaAcumulada++;
+                fechaEsperada = fecha;
+            } else {
+
+                long diferenciaDias = java.time.temporal.ChronoUnit.DAYS.between(fecha, fechaEsperada);
+
+                // entremedio)
+                if (diferenciaDias >= 1 && diferenciaDias <= 4) {
+                    rachaAcumulada++;
+                    fechaEsperada = fecha;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        return rachaAcumulada;
     }
 
     /**
