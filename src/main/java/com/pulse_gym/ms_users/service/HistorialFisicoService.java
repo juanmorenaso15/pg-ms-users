@@ -603,7 +603,7 @@ public class HistorialFisicoService {
         List<HistorialResumenDTO.SocioSimpleDTO> socios = historialRepository.findAll().stream()
                 .map(h -> h.getSocio())
                 .distinct()
-                .map(s -> new HistorialResumenDTO.SocioSimpleDTO(s.getIdUsuario(), s.getNombre() + " " + s.getApellido()))
+                .map(s -> new HistorialResumenDTO.SocioSimpleDTO(s.getIdUsuario(), s.getNombre() + " " + s.getApellido(), s.getTelefono()))
                 .collect(Collectors.toList());
 
         return new HistorialResumenDTO(total, primera, ultima, socios);
