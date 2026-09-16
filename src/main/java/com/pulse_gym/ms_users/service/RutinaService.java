@@ -108,7 +108,7 @@ public class RutinaService {
      * @param detalle Entidad a convertir
      * @return DTO del detalle
      */
-private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina detalle) {
+    private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina detalle) {
         DetalleRutinaResponseDTO dto = new DetalleRutinaResponseDTO();
         dto.setIdDetalle(detalle.getIdDetalleRutina());
         dto.setIdEjercicio(detalle.getEjercicio().getIdEjercicio());
@@ -126,7 +126,7 @@ private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina deta
         dto.setModificadoPor(detalle.getModificadoPor());
         dto.setEquipoRequerido(detalle.getEquipoRequerido());
         dto.setSemana(detalle.getSemana());
-        
+
         return dto;
     }
 
@@ -414,7 +414,7 @@ private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina deta
         rutina.setNivel(socio.getNivelExperiencia().name());
         rutina.setCondiciones("Días por semana: " + request.getDiasPorSemana() +
                 ", Duración: " + request.getDuracionSemanas() + " semanas");
-        rutina.setModeloIa("groq/compound");
+        rutina.setModeloIa("openai/gpt-oss-120b");
         rutina.setVersion(1);
         rutina.setActiva(true);
         rutina.setExplicacionIa(respuestaIA.getExplicacionIA());
@@ -452,8 +452,29 @@ private DetalleRutinaResponseDTO convertirDetalleAResponseDTO(DetalleRutina deta
                         .orElse(null);
 
                 if (ejercicio == null) {
-                    log.warn("Ejercicio no encontrado: {}, se omitirá", detalleDTO.getNombreEjercicio());
-                    continue;
+                    log.info(
+                            "Ejercicio nuevo detectado generado por IA: '{}'. Registrándolo automáticamente en la base de datos...",
+                            detalleDTO.getNombreEjercicio());
+
+                    ejercicio = new Ejercicio();
+                    ejercicio.setNombre(detalleDTO.getNombreEjercicio());
+
+                    String grupo = detalleDTO.getGrupoMuscular();
+                    if (grupo == null || grupo.trim().isEmpty()) {
+                        grupo = "GENERAL";
+                    }
+                    ejercicio.setGrupoMuscular(grupo.toUpperCase());
+
+                    String equipo = detalleDTO.getEquipoRequerido();
+                    ejercicio.setEquipoNecesario(equipo != null && !equipo.trim().isEmpty() ? equipo : "Peso corporal");
+
+                    ejercicio.setExplicacionTecnica(
+                            "Ejercicio funcional o de calistenia generado automáticamente por IA.");
+                    ejercicio.setDificultad(3);
+                    ejercicio.setActivo(true);
+
+                    ejercicio = ejercicioRepository.save(ejercicio);
+                    log.info("Ejercicio nuevo guardado exitosamente con ID: {}", ejercicio.getIdEjercicio());
                 }
 
                 detalle.setEjercicio(ejercicio);

@@ -223,7 +223,7 @@ public class PlanNutricionalService {
             plan.setPlanGenerado(respuestaIA.toString());
         }
 
-        plan.setModeloIa("groq/compound");
+        plan.setModeloIa("openai/gpt-oss-120b");
         plan.setVersion(1);
         plan.setActivo(true);
 
