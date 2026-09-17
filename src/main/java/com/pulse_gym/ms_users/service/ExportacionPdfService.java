@@ -420,7 +420,7 @@ public class ExportacionPdfService {
                 .setBorderTop(new SolidBorder(COLOR_BORDE, 1)));
 
         document.add(new Paragraph("Generado oficialmente por la plataforma Pulse Gym • "
-                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")))
+                + com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")))
                 .setFont(font)
                 .setFontSize(7.5f)
                 .setTextAlignment(TextAlignment.CENTER)

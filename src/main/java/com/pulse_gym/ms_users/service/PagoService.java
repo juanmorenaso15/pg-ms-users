@@ -239,7 +239,7 @@ public class PagoService {
             Pago nuevoPago = new Pago();
             nuevoPago.setSocioMembresia(socioMembresia);
             nuevoPago.setMonto(montoFormateado);
-            nuevoPago.setFechaPago(LocalDateTime.now());
+            nuevoPago.setFechaPago(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
             nuevoPago.setMetodoPago(metodoPagoFinal);
             nuevoPago.setPaymentIdMp(String.valueOf(payment.getId()));
             nuevoPago.setNumeroComprobante("MP-" + payment.getId());
@@ -310,9 +310,9 @@ public class PagoService {
                         : 30;
 
                 LocalDate fechaBase = (socioMembresia.getFechaVencimiento() != null
-                        && socioMembresia.getFechaVencimiento().isAfter(LocalDate.now()))
+                        && socioMembresia.getFechaVencimiento().isAfter(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()))
                                 ? socioMembresia.getFechaVencimiento()
-                                : LocalDate.now();
+                                : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
 
                 socioMembresia.setFechaVencimiento(fechaBase.plusDays(diasASumar));
                 socioMembresia.setEstado(EnumEstadoSocioMembresia.ACTIVA);
@@ -505,7 +505,7 @@ public class PagoService {
         Pago pago = new Pago();
         pago.setSocioMembresia(socioMembresia);
         pago.setMonto(montoMembresia);
-        pago.setFechaPago(LocalDateTime.now());
+        pago.setFechaPago(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
         pago.setMetodoPago(metodoPago);
         pago.setNumeroComprobante(comprobanteFinal);
         pago.setAdminRegistro(admin);
@@ -527,9 +527,9 @@ public class PagoService {
                                 : 30);
 
                 LocalDate fechaBase = (socioMembresia.getFechaVencimiento() != null
-                        && socioMembresia.getFechaVencimiento().isAfter(LocalDate.now()))
+                        && socioMembresia.getFechaVencimiento().isAfter(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()))
                                 ? socioMembresia.getFechaVencimiento()
-                                : LocalDate.now();
+                                : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
 
                 socioMembresia.setFechaVencimiento(fechaBase.plusDays(diasASumar));
 
@@ -652,7 +652,7 @@ public class PagoService {
             Pago nuevoPago = new Pago();
             nuevoPago.setSocioMembresia(socioMembresia);
             nuevoPago.setMonto(montoFormateado);
-            nuevoPago.setFechaPago(LocalDateTime.now());
+            nuevoPago.setFechaPago(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
             nuevoPago.setMetodoPago(requestDTO.getMetodoPago());
             nuevoPago.setEstado(EnumEstadoPago.PENDIENTE);
             nuevoPago.setAnulado(false);
@@ -1198,7 +1198,7 @@ public class PagoService {
         }
 
         pago.setAnulado(true);
-        pago.setFechaAnulacion(LocalDateTime.now());
+        pago.setFechaAnulacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
         pago.setMotivoAnulacion(requestDTO.getMotivo());
         pago.setEstado(EnumEstadoPago.ANULADO);
 
@@ -1311,7 +1311,7 @@ public class PagoService {
     public PaymentSummaryDTO obtenerResumenPagos() {
         List<Pago> pagos = pagoRepository.findAll();
 
-        java.time.LocalDate hoy = java.time.LocalDate.now();
+        java.time.LocalDate hoy = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         java.time.Month mesActual = hoy.getMonth();
         int anioActual = hoy.getYear();
 

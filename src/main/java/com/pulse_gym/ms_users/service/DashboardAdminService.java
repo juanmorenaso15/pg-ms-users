@@ -48,12 +48,12 @@ public class DashboardAdminService {
         long activos = usuarioRepository.countByEstado(EnumEstadoUsuario.ACTIVO);
         long inactivos = usuarioRepository.countByEstado(EnumEstadoUsuario.INACTIVO);
 
-        LocalDateTime inicioMes = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime inicioMes = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate().withDayOfMonth(1).atStartOfDay();
         long nuevosDelMes = usuarioRepository.countNuevosDesde(inicioMes);
 
         List<MembresiaPorVencerDTO> porVencer = socioMembresiaService.obtenerMembresiasPorVencer();
 
-        LocalDate ayer = LocalDate.now().minusDays(1);
+        LocalDate ayer = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate().minusDays(1);
 
         var afluenciaHoy = reportesClient.obtenerAfluenciaHoy(userRol);
         var afluenciaAyer = reportesClient.obtenerAfluenciaPorDia(ayer);

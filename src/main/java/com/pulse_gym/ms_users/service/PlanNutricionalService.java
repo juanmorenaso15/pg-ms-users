@@ -496,7 +496,7 @@ public class PlanNutricionalService {
         plan.setActivo(true);
 
         plan.setModificadoPor(nombreModificador);
-        plan.setFechaModificacion(LocalDateTime.now());
+        plan.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
         plan.setMotivoModificacion(request.getMotivo());
 
         try {
@@ -508,7 +508,7 @@ public class PlanNutricionalService {
                 dto.setRestriccionesDieteticas(request.getRestriccionesDieteticas());
             }
             dto.setModificadoPor(nombreModificador);
-            dto.setFechaModificacion(LocalDateTime.now());
+            dto.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
             dto.setMotivoModificacion(request.getMotivo());
 
             String planJson = objectMapper.writeValueAsString(dto);
@@ -598,7 +598,7 @@ public class PlanNutricionalService {
                 historial.setModificadoPorNombre(modificadoPor);
             }
 
-            historial.setFechaModificacion(LocalDateTime.now());
+            historial.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
             historialPlanNutricionalVersionRepository.save(historial);
 
             log.info("Historial guardado para plan ID: {}, versión: {}",
@@ -621,7 +621,7 @@ public class PlanNutricionalService {
                     historial.setModificadoPorNombre(modificadoPor);
                 }
 
-                historial.setFechaModificacion(LocalDateTime.now());
+                historial.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
                 historialPlanNutricionalVersionRepository.save(historial);
                 log.info("Historial guardado con fallback para plan ID: {}, versión: {}",
                         plan.getIdPlanNutricional(), plan.getVersion());
@@ -837,7 +837,7 @@ public class PlanNutricionalService {
         plan.setVersion(plan.getVersion() + 1);
         plan.setActivo(true);
         plan.setModificadoPor(nombreModificador);
-        plan.setFechaModificacion(LocalDateTime.now());
+        plan.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
         plan.setMotivoModificacion(request.getMotivo() != null ? request.getMotivo() : "Ajuste por el socio");
 
         try {

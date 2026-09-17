@@ -2,13 +2,17 @@ package com.pulse_gym.ms_users.service;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -59,42 +63,25 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class SeguimientoService {
 
-    /** Repositorio de sesiones de entrenamiento */
     private final SesionEntrenamientoRepository sesionRepository;
-
-    /** Repositorio de detalles de sesión */
     private final DetalleSesionEjercicioRepository detalleSesionRepository;
-
-    /** Repositorio de detalles de rutina */
     private final DetalleRutinaRepository detalleRutinaRepository;
-
-    /** Repositorio de usuarios */
     private final UsuarioPerfilRepository usuarioRepository;
-
-    /** Repositorio de rutinas */
     private final RutinaRepository rutinaRepository;
-
-    /** Repositorio de asignaciones entrenador-socio */
     private final EntrenadorSocioRepository entrenadorSocioRepository;
-
-    /** Servicio para exportar rutinas a PDF */
     private final ExportacionPdfService exportacionPdfService;
-
-    /** Repositorio de planes nutricionales */
     private final PlanNutricionalRepository planNutricionalRepository;
-
-    /** ObjectMapper para conversiones de objetos */
     private final ObjectMapper objectMapper;
-
-    /** Repositorio de historial de versiones de rutinas */
     private final HistorialRutinaVersionRepository historialRutinaVersionRepository;
 
     /**
-     * Convierte una entidad SesionEntrenamiento a SesionResponseDTO
-     * 
-     * @param sesion Entidad a convertir
-     * @return DTO de la sesión
+     * Obtiene la fecha y hora actual ajustada estrictamente a la zona horaria de
+     * Colombia.
      */
+    private LocalDateTime obtenerFechaHoraColombia() {
+        return ZonedDateTime.now(ZoneId.of("America/Bogota")).toLocalDateTime();
+    }
+
     private SesionResponseDTO convertirAResponseDTO(SesionEntrenamiento sesion) {
         SesionResponseDTO dto = new SesionResponseDTO();
         dto.setIdSesion(sesion.getIdSesion());
@@ -119,12 +106,6 @@ public class SeguimientoService {
         return dto;
     }
 
-    /**
-     * Convierte una entidad DetalleSesionEjercicio a DetalleSesionResponseDTO
-     * 
-     * @param detalle Entidad a convertir
-     * @return DTO del detalle de sesión
-     */
     private DetalleSesionResponseDTO convertirDetalleAResponseDTO(DetalleSesionEjercicio detalle) {
         DetalleSesionResponseDTO dto = new DetalleSesionResponseDTO();
         dto.setIdDetalleSesion(detalle.getIdDetalleSesion());
@@ -139,23 +120,14 @@ public class SeguimientoService {
         return dto;
     }
 
-    /**
-     * Busca un entrenador disponible con menor carga de socios asignados
-     * 
-     * @return Entrenador disponible o null si no hay
-     */
     private UsuarioPerfil buscarEntrenadorDisponible() {
         List<UsuarioPerfil> entrenadores = usuarioRepository.findEntrenadoresActivos();
-
         if (entrenadores.isEmpty()) {
             entrenadores = usuarioRepository.findByEmailContainingAndEstado("entrenador", EnumEstadoUsuario.ACTIVO);
         }
-
         if (entrenadores.isEmpty()) {
-            log.warn("No hay entrenadores activos en el sistema");
             return null;
         }
-
         if (entrenadores.size() == 1) {
             return entrenadores.get(0);
         }
@@ -166,22 +138,14 @@ public class SeguimientoService {
         for (UsuarioPerfil entrenador : entrenadores) {
             Long cantidadSocios = entrenadorSocioRepository.countByEntrenadorAndActivaTrue(
                     entrenador.getIdUsuario());
-
             if (cantidadSocios < menorCantidadSocios) {
                 menorCantidadSocios = cantidadSocios.intValue();
                 entrenadorSeleccionado = entrenador;
             }
         }
-
         return entrenadorSeleccionado;
     }
 
-    /**
-     * Asigna un socio a un entrenador si no tiene asignación activa
-     * 
-     * @param socio      Socio a asignar
-     * @param entrenador Entrenador asignado
-     */
     private void asignarSocioAEntrenadorSiNoExiste(UsuarioPerfil socio, UsuarioPerfil entrenador) {
         boolean existe = entrenadorSocioRepository
                 .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(
@@ -194,29 +158,35 @@ public class SeguimientoService {
             asignacion.setSocio(socio);
             asignacion.setActiva(true);
             entrenadorSocioRepository.save(asignacion);
-            log.info("Socio {} asignado automáticamente al entrenador {} al registrar sesión",
-                    socio.getIdUsuario(), entrenador.getIdUsuario());
         }
     }
 
     /**
-     * Registra una sesión de entrenamiento con asignación automática de entrenador
-     * 
-     * @param request   Datos de la sesión a registrar
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return DTO con la sesión registrada
+     * Registra una sesión de entrenamiento validando que hayan transcurrido al
+     * menos 12 horas desde la última sesión.
      */
     @Transactional
-    public SesionResponseDTO registrarSesion(RegistroSesionRequestDTO request,
-            String userRol,
-            String userEmail) {
+    public SesionResponseDTO registrarSesion(RegistroSesionRequestDTO request, String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo los socios pueden registrar sesiones");
         }
 
         UsuarioPerfil socioAutenticado = usuarioRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+        LocalDateTime ahoraColombia = obtenerFechaHoraColombia();
+        LocalDate hoyColombia = ahoraColombia.toLocalDate();
+
+        List<SesionEntrenamiento> sesionesRegistradasHoy = sesionRepository
+                .findBySocio_IdUsuarioOrderByFechaSesionDesc(socioAutenticado.getIdUsuario())
+                .stream()
+                .filter(s -> s.getFechaSesion().toLocalDate().equals(hoyColombia))
+                .collect(Collectors.toList());
+
+        if (!sesionesRegistradasHoy.isEmpty()) {
+            throw new RuntimeException(
+                    "Ya has registrado un seguimiento el día de hoy. Podrás registrar tu siguiente sesión a partir de mañana.");
+        }
 
         SesionEntrenamiento sesion = new SesionEntrenamiento();
         sesion.setSocio(socioAutenticado);
@@ -228,18 +198,10 @@ public class SeguimientoService {
             rutina = rutinaRepository.findById(request.getIdRutina())
                     .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
             sesion.setRutina(rutina);
-
             entrenadorAsignado = rutina.getEntrenador();
 
             if (entrenadorAsignado == null) {
                 entrenadorAsignado = buscarEntrenadorDisponible();
-                if (entrenadorAsignado != null) {
-                    log.info("Asignando entrenador activo ID: {} al socio ID: {}",
-                            entrenadorAsignado.getIdUsuario(), socioAutenticado.getIdUsuario());
-                } else {
-                    log.warn("No se encontró ningún entrenador activo disponible para asignar al socio ID: {}",
-                            socioAutenticado.getIdUsuario());
-                }
             }
 
             if (entrenadorAsignado != null) {
@@ -250,6 +212,7 @@ public class SeguimientoService {
         sesion.setDuracionMinutos(request.getDuracionMinutos());
         sesion.setEstado(EnumEstadoSesion.COMPLETADA);
         sesion.setObservaciones(request.getObservaciones());
+        sesion.setFechaSesion(ahoraColombia); // Asigna hora exacta de Colombia
         sesion = sesionRepository.save(sesion);
 
         if (request.getDetalles() != null) {
@@ -273,14 +236,6 @@ public class SeguimientoService {
         return convertirAResponseDTO(sesion);
     }
 
-    /**
-     * Obtiene el historial de sesiones de un socio con validación de permisos
-     * 
-     * @param idSocio   ID del socio a consultar
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return Lista de sesiones del socio
-     */
     public List<SesionResponseDTO> obtenerHistorialSesiones(Long idSocio, String userRol, String userEmail) {
         UsuarioPerfil socio = usuarioRepository.findById(idSocio)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
@@ -307,14 +262,6 @@ public class SeguimientoService {
         return sesiones.stream().map(this::convertirAResponseDTO).collect(Collectors.toList());
     }
 
-    /**
-     * Obtiene el dashboard de progreso de un socio con validación de permisos
-     * 
-     * @param idSocio   ID del socio a consultar
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return DTO con el dashboard de progreso del socio
-     */
     public DashboardProgresoSocioDTO obtenerDashboardSocio(Long idSocio, String userRol, String userEmail) {
         UsuarioPerfil socio = usuarioRepository.findById(idSocio)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
@@ -353,13 +300,6 @@ public class SeguimientoService {
         return dashboard;
     }
 
-    /**
-     * Obtiene el dashboard de monitoreo para entrenadores con sus socios asignados
-     * 
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return DTO con el dashboard de monitoreo
-     */
     public DashboardMonitoreoEntrenadorDTO obtenerDashboardMonitoreo(String userRol, String userEmail) {
         if (!EnumRol.entrenador.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo entrenadores pueden acceder a este dashboard");
@@ -374,19 +314,13 @@ public class SeguimientoService {
 
         List<UsuarioPerfil> socios = entrenadorSocioRepository.findSociosActivosByEntrenador(entrenador.getIdUsuario());
         List<ResumenSocioDTO> resumenSocios = socios.stream()
-                .map(socio -> construirResumenSocio(socio))
+                .map(this::construirResumenSocio)
                 .collect(Collectors.toList());
 
         dashboard.setSociosAsignados(resumenSocios);
         return dashboard;
     }
 
-    /**
-     * Construye el resumen de un socio para el dashboard del entrenador
-     * 
-     * @param socio Socio a construir el resumen
-     * @return DTO con el resumen del socio
-     */
     private ResumenSocioDTO construirResumenSocio(UsuarioPerfil socio) {
         ResumenSocioDTO resumen = new ResumenSocioDTO();
         resumen.setIdSocio(socio.getIdUsuario());
@@ -398,28 +332,15 @@ public class SeguimientoService {
         return resumen;
     }
 
-    /**
-     * Calcula el número de días sin entrenar de un socio
-     * 
-     * @param idSocio ID del socio
-     * @return Número de días sin entrenar
-     */
     private Integer calcularDiasSinEntrenar(Long idSocio) {
         List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
         if (sesiones.isEmpty())
             return 30;
         LocalDateTime ultima = sesiones.get(0).getFechaSesion();
-        long dias = java.time.temporal.ChronoUnit.DAYS.between(ultima, LocalDateTime.now());
+        long dias = java.time.temporal.ChronoUnit.DAYS.between(ultima, obtenerFechaHoraColombia());
         return (int) Math.max(dias, 0);
     }
 
-    /**
-     * Calcula la evolución de cargas de un socio basado en el peso usado en los
-     * ejercicios
-     * 
-     * @param idSocio ID del socio
-     * @return Estado de evolución (PROGRESO, RETROCESO, ESTANCADO)
-     */
     private String calcularEvolucionCargas(Long idSocio) {
         List<DetalleSesionEjercicio> detalles = detalleSesionRepository.findDetallesBySocio(idSocio);
         if (detalles.isEmpty())
@@ -454,40 +375,37 @@ public class SeguimientoService {
     }
 
     /**
-     * Calcula el porcentaje de cumplimiento semanal de un socio
-     * 
-     * @param idSocio ID del socio
-     * @return Porcentaje de cumplimiento (0-100)
+     * Calcula el cumplimiento semanal de LUNES a DOMINGO de la semana actual.
      */
     private Double calcularCumplimientoSemanal(Long idSocio) {
-        LocalDateTime inicioSemana = LocalDateTime.now().minusDays(7);
-        Long sesiones = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemana);
+        LocalDateTime ahora = obtenerFechaHoraColombia();
+        LocalDateTime inicioSemana = ahora.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toLocalDate()
+                .atStartOfDay();
+        LocalDateTime finSemana = ahora.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toLocalDate().atTime(23,
+                59, 59);
+
+        Long sesiones = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemana, finSemana);
         double meta = 3.0;
         double cumplimiento = Math.min((sesiones / meta) * 100, 100.0);
         return Math.round(cumplimiento * 10.0) / 10.0;
     }
 
     /**
-     * Calcula el porcentaje de cumplimiento de la semana anterior de un socio
-     * 
-     * @param idSocio ID del socio
-     * @return Porcentaje de cumplimiento de la semana anterior (0-100)
+     * Calcula el cumplimiento de la semana anterior (Lunes a Domingo previos).
      */
     private Double calcularCumplimientoSemanaAnterior(Long idSocio) {
-        LocalDateTime inicio = LocalDateTime.now().minusDays(14);
-        LocalDateTime fin = LocalDateTime.now().minusDays(7);
-        Long sesiones = sesionRepository.countSesionesEnPeriodo(idSocio, inicio, fin);
+        LocalDateTime ahora = obtenerFechaHoraColombia();
+        LocalDateTime inicioSemanaActual = ahora.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toLocalDate()
+                .atStartOfDay();
+        LocalDateTime inicioSemanaAnterior = inicioSemanaActual.minusWeeks(1);
+        LocalDateTime finSemanaAnterior = inicioSemanaActual.minusSeconds(1);
+
+        Long sesiones = sesionRepository.countSesionesEnPeriodo(idSocio, inicioSemanaAnterior, finSemanaAnterior);
         double meta = 3.0;
         double cumplimiento = Math.min((sesiones / meta) * 100, 100.0);
         return Math.round(cumplimiento * 10.0) / 10.0;
     }
 
-    /**
-     * Calcula la evolución de cada ejercicio de un socio basado en el peso usado
-     * 
-     * @param idSocio ID del socio
-     * @return Lista de evolución por ejercicio
-     */
     private List<EvolucionEjercicioDTO> calcularEvolucionEjercicios(Long idSocio) {
         List<DetalleSesionEjercicio> detalles = detalleSesionRepository.findDetallesBySocio(idSocio);
         if (detalles.isEmpty())
@@ -521,12 +439,6 @@ public class SeguimientoService {
         return evoluciones;
     }
 
-    /**
-     * Calcula el promedio de duración de las sesiones de un socio
-     * 
-     * @param idSocio ID del socio
-     * @return Promedio de duración en minutos
-     */
     private Double calcularPromedioDuracion(Long idSocio) {
         List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
         if (sesiones.isEmpty())
@@ -535,23 +447,11 @@ public class SeguimientoService {
     }
 
     /**
-     * Calcula la racha de días consecutivos entrenando de un socio
-     * 
-     * @param idSocio ID del socio
-     * @return Número de días consecutivos entrenando
-     */
-    /**
-     * Calcula la racha acumulada de entrenamientos de un socio.
-     * Permite una tolerancia de hasta 3 días sin entrenar (ej. fines de semana o
-     * festivos)
-     * sin romper la racha, acumulando los días de entrenamiento exitosos.
-     * 
-     * @param idSocio ID del socio
-     * @return Número total de días de racha acumulados bajo los criterios de
-     *         tolerancia
+     * Calcula la racha estricta basada exclusivamente en registros reales de
+     * asistencia/progreso.
+     * Si no hay sesión registrada, no hay incremento ni activación de racha.
      */
     private Integer calcularRachaDias(Long idSocio) {
-
         List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
         if (sesiones == null || sesiones.isEmpty()) {
             return 0;
@@ -563,9 +463,11 @@ public class SeguimientoService {
                 .sorted((a, b) -> b.compareTo(a))
                 .collect(Collectors.toList());
 
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = obtenerFechaHoraColombia().toLocalDate();
         LocalDate ultimaSesion = fechasSesiones.get(0);
 
+        // Si la última sesión registrada supera los 3 días de inactividad, la racha se
+        // reinicia a 0.
         long diasDesdeUltimaSesion = java.time.temporal.ChronoUnit.DAYS.between(ultimaSesion, hoy);
         if (diasDesdeUltimaSesion > 3) {
             return 0;
@@ -579,10 +481,7 @@ public class SeguimientoService {
                 rachaAcumulada++;
                 fechaEsperada = fecha;
             } else {
-
                 long diferenciaDias = java.time.temporal.ChronoUnit.DAYS.between(fecha, fechaEsperada);
-
-                // entremedio)
                 if (diferenciaDias >= 1 && diferenciaDias <= 4) {
                     rachaAcumulada++;
                     fechaEsperada = fecha;
@@ -595,16 +494,6 @@ public class SeguimientoService {
         return rachaAcumulada;
     }
 
-    /**
-     * Exporta una rutina a formato PDF con validación de permisos
-     * 
-     * @param idSocio   ID del socio dueño de la rutina
-     * @param idRutina  ID de la rutina a exportar (opcional, si es null se usa la
-     *                  activa)
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return Array de bytes del PDF generado
-     */
     public byte[] exportarRutinaPdf(Long idSocio, Long idRutina, String userRol, String userEmail) {
         UsuarioPerfil socio = usuarioRepository.findById(idSocio)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
@@ -645,9 +534,7 @@ public class SeguimientoService {
 
         if (rutina.getRutinaGenerada() != null && !rutina.getRutinaGenerada().isEmpty()) {
             try {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode root = mapper.readTree(rutina.getRutinaGenerada());
-
+                JsonNode root = objectMapper.readTree(rutina.getRutinaGenerada());
                 if (root.has("descripcion") && !root.get("descripcion").asText().isEmpty()) {
                     descripcion = root.get("descripcion").asText();
                 }
@@ -730,16 +617,6 @@ public class SeguimientoService {
         }
     }
 
-    /**
-     * Exporta un plan nutricional a formato PDF con validación de permisos
-     * 
-     * @param idSocio   ID del socio dueño del plan
-     * @param idPlan    ID del plan nutricional a exportar (opcional, si es null se
-     *                  usa el activo)
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return Array de bytes del PDF generado
-     */
     public byte[] exportarPlanNutricionalPdf(Long idSocio, Long idPlan, String userRol, String userEmail) {
         UsuarioPerfil socio = usuarioRepository.findById(idSocio)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
@@ -794,7 +671,6 @@ public class SeguimientoService {
         }
 
         exportDTO.setExplicacionIA(plan.getExplicacionIA());
-
         exportDTO.setModificadoPor(plan.getModificadoPor());
         exportDTO.setFechaModificacion(plan.getFechaModificacion());
         exportDTO.setMotivoModificacion(plan.getMotivoModificacion());
@@ -838,16 +714,6 @@ public class SeguimientoService {
         }
     }
 
-    /**
-     * Obtiene el dashboard de progreso del socio autenticado
-     * Todas las validaciones se realizan aquí (Service)
-     * 
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del socio autenticado (extraído del token)
-     * @return DTO con el dashboard de progreso del socio
-     * @throws SecurityAuthorizationException Si el usuario no es un socio
-     * @throws RuntimeException               Si el socio no existe
-     */
     public DashboardProgresoSocioDTO obtenerMiDashboard(String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             log.warn("Intento de acceso al dashboard por usuario no socio: {}", userEmail);
@@ -888,12 +754,6 @@ public class SeguimientoService {
         return dashboard;
     }
 
-    /**
-     * Obtiene la última sesión de entrenamiento de un socio
-     * 
-     * @param idSocio ID del socio
-     * @return Fecha de la última sesión o null si no hay
-     */
     private LocalDateTime obtenerUltimaSesion(Long idSocio) {
         List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
         if (sesiones.isEmpty()) {
@@ -902,14 +762,6 @@ public class SeguimientoService {
         return sesiones.get(0).getFechaSesion();
     }
 
-    /**
-     * Exporta la rutina activa del socio autenticado a PDF
-     * 
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return Array de bytes del PDF generado
-     * @throws SecurityAuthorizationException Si el usuario no es socio
-     */
     public byte[] exportarMiRutinaPdf(String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo los socios pueden exportar su propia rutina");
@@ -921,16 +773,6 @@ public class SeguimientoService {
         return exportarRutinaPdf(socio.getIdUsuario(), null, userRol, userEmail);
     }
 
-    /**
-     * Exporta una rutina específica del socio autenticado a PDF
-     * 
-     * @param idRutina  ID de la rutina a exportar
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return Array de bytes del PDF generado
-     * @throws SecurityAuthorizationException Si el usuario no es socio o la rutina
-     *                                        no le pertenece
-     */
     public byte[] exportarMiRutinaEspecificaPdf(Long idRutina, String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo los socios pueden exportar su propia rutina");
@@ -949,14 +791,6 @@ public class SeguimientoService {
         return exportarRutinaPdf(socio.getIdUsuario(), idRutina, userRol, userEmail);
     }
 
-    /**
-     * Exporta el plan nutricional activo del socio autenticado a PDF
-     * 
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return Array de bytes del PDF generado
-     * @throws SecurityAuthorizationException Si el usuario no es socio
-     */
     public byte[] exportarMiPlanNutricionalPdf(String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo los socios pueden exportar su propio plan nutricional");
@@ -968,16 +802,6 @@ public class SeguimientoService {
         return exportarPlanNutricionalPdf(socio.getIdUsuario(), null, userRol, userEmail);
     }
 
-    /**
-     * Exporta un plan nutricional específico del socio autenticado a PDF
-     * 
-     * @param idPlan    ID del plan nutricional a exportar
-     * @param userRol   Rol del usuario autenticado
-     * @param userEmail Email del usuario autenticado
-     * @return Array de bytes del PDF generado
-     * @throws SecurityAuthorizationException Si el usuario no es socio o el plan no
-     *                                        le pertenece
-     */
     public byte[] exportarMiPlanNutricionalEspecificoPdf(Long idPlan, String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo los socios pueden exportar su propio plan nutricional");
