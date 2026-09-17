@@ -515,7 +515,7 @@ public class UsuarioPerfilService {
      */
     @Transactional(readOnly = true)
     public UsuarioPerfilResponseDTO obtenerUsuarioPorId(Long idUsuario, String userRol) {
-        ValidacionDeRoles.validarAdminORecepcionista(userRol);
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         if (idUsuario == null) {
             throw new RuntimeException("El ID del usuario no puede ser nulo");

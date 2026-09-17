@@ -126,7 +126,7 @@ public class HistorialFisicoService {
         historial.setSocio(socio);
         historial.setRecepcionista(recepcionista);
         historial.setFechaMedicion(
-                requestDTO.getFechaMedicion() != null ? requestDTO.getFechaMedicion() : LocalDateTime.now());
+                requestDTO.getFechaMedicion() != null ? requestDTO.getFechaMedicion() : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
         historial.setPesoKg(requestDTO.getPesoKg());
         historial.setAlturaCm(requestDTO.getAlturaCm());
         historial.setCuelloCm(requestDTO.getCuelloCm());
@@ -211,7 +211,7 @@ public class HistorialFisicoService {
 
                 int edad = 25;
                 if (socio.getFechaNacimiento() != null) {
-                    edad = Period.between(socio.getFechaNacimiento(), LocalDate.now()).getYears();
+                    edad = Period.between(socio.getFechaNacimiento(), com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()).getYears();
                 }
 
                 int factorSexo = esFemenino ? 0 : 1;
@@ -360,10 +360,10 @@ public class HistorialFisicoService {
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado con ID: " + idSocio));
 
         if (fechaInicio == null) {
-            fechaInicio = LocalDateTime.now().minusMonths(6);
+            fechaInicio = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().minusMonths(6);
         }
         if (fechaFin == null) {
-            fechaFin = LocalDateTime.now();
+            fechaFin = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia();
         }
 
         List<HistorialFisico> historial = historialRepository
@@ -477,10 +477,10 @@ public class HistorialFisicoService {
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
 
         if (fechaInicio == null) {
-            fechaInicio = LocalDateTime.now().minusMonths(6);
+            fechaInicio = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().minusMonths(6);
         }
         if (fechaFin == null) {
-            fechaFin = LocalDateTime.now();
+            fechaFin = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia();
         }
 
         List<HistorialFisico> historial = historialRepository

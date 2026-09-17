@@ -167,7 +167,7 @@ public class SocioMembresiaService {
                     "El socio ya tiene una membresía activa. Debe renovar o cancelar la actual primero.");
         }
 
-        LocalDate fechaInicio = requestDTO.getFechaInicio() != null ? requestDTO.getFechaInicio() : LocalDate.now();
+        LocalDate fechaInicio = requestDTO.getFechaInicio() != null ? requestDTO.getFechaInicio() : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         LocalDate fechaVencimiento = calcularFechaVencimiento(fechaInicio, membresia);
 
         SocioMembresia socioMembresia = new SocioMembresia();
@@ -267,7 +267,7 @@ public class SocioMembresiaService {
         socioMembresia.setEstado(EnumEstadoSocioMembresia.RENOVADA);
         socioMembresiaRepository.save(socioMembresia);
 
-        LocalDate nuevaFechaInicio = LocalDate.now();
+        LocalDate nuevaFechaInicio = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         LocalDate nuevaFechaVencimiento;
         Integer diasAsignados = null;
 
@@ -387,7 +387,7 @@ public class SocioMembresiaService {
             List<SocioMembresia> vencidas = socioMembresiaRepository
                     .findByEstadoAndFechaVencimientoBefore(
                             EnumEstadoSocioMembresia.ACTIVA,
-                            LocalDate.now());
+                            com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate());
 
             if (vencidas.isEmpty()) {
                 log.info("No hay membresías vencidas para actualizar");
@@ -399,7 +399,7 @@ public class SocioMembresiaService {
                 String observacionesAnteriores = sm.getObservaciones();
                 String nuevaObservacion = String.format(
                         "Vencimiento automático el %s (días restantes: 0)%s",
-                        LocalDate.now(),
+                        com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate(),
                         observacionesAnteriores != null ? " - " + observacionesAnteriores : "");
 
                 sm.setEstado(EnumEstadoSocioMembresia.VENCIDA);
@@ -539,7 +539,7 @@ public class SocioMembresiaService {
             Membresia membresia = socioMembresia.getMembresia();
             int diasTotales = membresia.getTipoDuracion().calcularDiasTotales(
                     membresia.getCantidad() != null ? membresia.getCantidad() : 1);
-            LocalDate nuevaFechaVencimiento = LocalDate.now().plusDays(diasTotales);
+            LocalDate nuevaFechaVencimiento = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate().plusDays(diasTotales);
             socioMembresia.setFechaVencimiento(nuevaFechaVencimiento);
 
             socioMembresiaRepository.save(socioMembresia);
@@ -554,9 +554,9 @@ public class SocioMembresiaService {
             int diasTotales = membresia.getTipoDuracion().calcularDiasTotales(
                     membresia.getCantidad() != null ? membresia.getCantidad() : 1);
 
-            LocalDate fechaBase = socioMembresia.getFechaVencimiento().isAfter(LocalDate.now())
+            LocalDate fechaBase = socioMembresia.getFechaVencimiento().isAfter(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate())
                     ? socioMembresia.getFechaVencimiento()
-                    : LocalDate.now();
+                    : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
             LocalDate nuevaFechaVencimiento = fechaBase.plusDays(diasTotales);
             socioMembresia.setFechaVencimiento(nuevaFechaVencimiento);
 
@@ -575,7 +575,7 @@ public class SocioMembresiaService {
             fechaInicio = LocalDate.of(1900, 1, 1);
         }
         if (fechaFin == null) {
-            fechaFin = LocalDate.now();
+            fechaFin = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         }
 
         List<SocioMembresia> morosos = socioMembresiaRepository.findMorosos(fechaInicio, fechaFin);
@@ -634,7 +634,7 @@ public class SocioMembresiaService {
             throw new RuntimeException("La membresía flexible no tiene precio por día configurado");
         }
 
-        LocalDate fechaInicio = LocalDate.now();
+        LocalDate fechaInicio = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         LocalDate fechaVencimiento = fechaInicio.plusDays(requestDTO.getCantidadDias());
 
         BigDecimal precioReal = membresia.getPrecioPorDia()
@@ -678,7 +678,7 @@ public class SocioMembresiaService {
      */
     @Transactional(readOnly = true)
     public List<MembresiaPorVencerDTO> obtenerMembresiasPorVencer() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         LocalDate fechaLimite = hoy.plusDays(5);
 
         List<SocioMembresia> membresias = socioMembresiaRepository
@@ -718,7 +718,7 @@ public class SocioMembresiaService {
             throw new IllegalArgumentException("diasMaximo no puede ser mayor a 365");
         }
 
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         LocalDate fechaInicio = hoy.plusDays(diasMinimo);
         LocalDate fechaFin = hoy.plusDays(diasMaximo);
 
@@ -743,7 +743,7 @@ public class SocioMembresiaService {
      */
     private MembresiaPorVencerDTO convertirAPorVencerDTO(SocioMembresia sm) {
         UsuarioPerfil socio = sm.getSocio();
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         long dias = hoy.until(sm.getFechaVencimiento()).getDays();
         int diasRestantes = (int) Math.max(0, dias);
 
@@ -865,7 +865,7 @@ public class SocioMembresiaService {
     @Transactional(readOnly = true)
     public Page<MembresiaPorVencerDTO> obtenerMembresiasPorVencerPaginadas(int diasMinimo, int diasMaximo,
             Pageable pageable) {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
         LocalDate fechaInicio = hoy.plusDays(diasMinimo);
         LocalDate fechaFin = hoy.plusDays(diasMaximo);
 

@@ -241,7 +241,7 @@ public class RutinaService {
                 historial.setModificadoPorNombre("Sistema");
             }
 
-            historial.setFechaModificacion(LocalDateTime.now());
+            historial.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
             historialRutinaVersionRepository.save(historial);
 
             log.info("Historial guardado para rutina ID: {}, versión: {}, modificado por: {}",
@@ -263,7 +263,7 @@ public class RutinaService {
                     historial.setModificadoPorNombre("Sistema");
                 }
 
-                historial.setFechaModificacion(LocalDateTime.now());
+                historial.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
                 historialRutinaVersionRepository.save(historial);
                 log.info("Historial guardado con fallback para rutina ID: {}, versión: {}",
                         rutina.getIdRutinaIa(), rutina.getVersion());
@@ -700,7 +700,7 @@ public class RutinaService {
         }
 
         detalle.setModificadoPor(nombreModificador);
-        detalle.setFechaModificacion(LocalDateTime.now());
+        detalle.setFechaModificacion(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
 
         detalleRutinaRepository.save(detalle);
 

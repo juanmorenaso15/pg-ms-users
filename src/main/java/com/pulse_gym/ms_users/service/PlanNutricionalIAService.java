@@ -53,7 +53,7 @@ public class PlanNutricionalIAService {
     private int calcularEdad(LocalDate fechaNacimiento) {
         if (fechaNacimiento == null)
             return 0;
-        return Period.between(fechaNacimiento, LocalDate.now()).getYears();
+        return Period.between(fechaNacimiento, com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()).getYears();
     }
 
     /**
