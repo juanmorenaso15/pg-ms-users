@@ -6,8 +6,6 @@ import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,6 +43,7 @@ import com.pulse_gym.lb_common.enums.EnumEstadoSesion;
 import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
 import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
+import com.pulse_gym.lb_common.util.FechaUtils;
 import com.pulse_gym.ms_users.repository.DetalleRutinaRepository;
 import com.pulse_gym.ms_users.repository.DetalleSesionEjercicioRepository;
 import com.pulse_gym.ms_users.repository.EntrenadorSocioRepository;
@@ -74,12 +73,8 @@ public class SeguimientoService {
     private final ObjectMapper objectMapper;
     private final HistorialRutinaVersionRepository historialRutinaVersionRepository;
 
-    /**
-     * Obtiene la fecha y hora actual ajustada estrictamente a la zona horaria de
-     * Colombia.
-     */
     private LocalDateTime obtenerFechaHoraColombia() {
-        return ZonedDateTime.now(ZoneId.of("America/Bogota")).toLocalDateTime();
+        return FechaUtils.ahoraColombia();
     }
 
     private SesionResponseDTO convertirAResponseDTO(SesionEntrenamiento sesion) {
@@ -161,10 +156,6 @@ public class SeguimientoService {
         }
     }
 
-    /**
-     * Registra una sesión de entrenamiento validando que hayan transcurrido al
-     * menos 12 horas desde la última sesión.
-     */
     @Transactional
     public SesionResponseDTO registrarSesion(RegistroSesionRequestDTO request, String userRol, String userEmail) {
         if (!EnumRol.socio.name().equals(userRol)) {
@@ -212,7 +203,7 @@ public class SeguimientoService {
         sesion.setDuracionMinutos(request.getDuracionMinutos());
         sesion.setEstado(EnumEstadoSesion.COMPLETADA);
         sesion.setObservaciones(request.getObservaciones());
-        sesion.setFechaSesion(ahoraColombia); // Asigna hora exacta de Colombia
+        sesion.setFechaSesion(ahoraColombia);
         sesion = sesionRepository.save(sesion);
 
         if (request.getDetalles() != null) {
@@ -290,6 +281,7 @@ public class SeguimientoService {
         dashboard.setRachaDiasEntrenando(calcularRachaDias(idSocio));
         dashboard.setPorcentajeCumplimientoSemanal(calcularCumplimientoSemanal(idSocio));
         dashboard.setPorcentajeCumplimientoSemanaAnterior(calcularCumplimientoSemanaAnterior(idSocio));
+        dashboard.setDiasEntrenadosSemana(calcularDiasEntrenadosSemana(idSocio));
         dashboard.setEvolucionEjercicios(calcularEvolucionEjercicios(idSocio));
 
         Map<String, Object> estadisticas = new HashMap<>();
@@ -374,9 +366,6 @@ public class SeguimientoService {
             return "ESTANCADO";
     }
 
-    /**
-     * Calcula el cumplimiento semanal de LUNES a DOMINGO de la semana actual.
-     */
     private Double calcularCumplimientoSemanal(Long idSocio) {
         LocalDateTime ahora = obtenerFechaHoraColombia();
         LocalDateTime inicioSemana = ahora.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toLocalDate()
@@ -390,9 +379,6 @@ public class SeguimientoService {
         return Math.round(cumplimiento * 10.0) / 10.0;
     }
 
-    /**
-     * Calcula el cumplimiento de la semana anterior (Lunes a Domingo previos).
-     */
     private Double calcularCumplimientoSemanaAnterior(Long idSocio) {
         LocalDateTime ahora = obtenerFechaHoraColombia();
         LocalDateTime inicioSemanaActual = ahora.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toLocalDate()
@@ -404,6 +390,26 @@ public class SeguimientoService {
         double meta = 3.0;
         double cumplimiento = Math.min((sesiones / meta) * 100, 100.0);
         return Math.round(cumplimiento * 10.0) / 10.0;
+    }
+
+    /**
+     * Calcula los días de la semana actual (1 = Lunes, ..., 7 = Domingo) 
+     * en los que el socio registró asistencia real usando la hora de Colombia.
+     */
+    private List<Integer> calcularDiasEntrenadosSemana(Long idSocio) {
+        LocalDateTime ahora = obtenerFechaHoraColombia();
+        LocalDateTime inicioSemana = ahora.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toLocalDate().atStartOfDay();
+        LocalDateTime finSemana = ahora.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toLocalDate().atTime(23, 59, 59);
+
+        List<SesionEntrenamiento> sesionesSemana = sesionRepository.findSesionesDesdeFecha(idSocio, inicioSemana)
+                .stream()
+                .filter(s -> !s.getFechaSesion().isAfter(finSemana))
+                .collect(Collectors.toList());
+
+        return sesionesSemana.stream()
+                .map(s -> s.getFechaSesion().getDayOfWeek().getValue())
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     private List<EvolucionEjercicioDTO> calcularEvolucionEjercicios(Long idSocio) {
@@ -446,11 +452,6 @@ public class SeguimientoService {
         return sesiones.stream().mapToInt(SesionEntrenamiento::getDuracionMinutos).average().orElse(0.0);
     }
 
-    /**
-     * Calcula la racha estricta basada exclusivamente en registros reales de
-     * asistencia/progreso.
-     * Si no hay sesión registrada, no hay incremento ni activación de racha.
-     */
     private Integer calcularRachaDias(Long idSocio) {
         List<SesionEntrenamiento> sesiones = sesionRepository.findBySocio_IdUsuarioOrderByFechaSesionDesc(idSocio);
         if (sesiones == null || sesiones.isEmpty()) {
@@ -466,8 +467,6 @@ public class SeguimientoService {
         LocalDate hoy = obtenerFechaHoraColombia().toLocalDate();
         LocalDate ultimaSesion = fechasSesiones.get(0);
 
-        // Si la última sesión registrada supera los 3 días de inactividad, la racha se
-        // reinicia a 0.
         long diasDesdeUltimaSesion = java.time.temporal.ChronoUnit.DAYS.between(ultimaSesion, hoy);
         if (diasDesdeUltimaSesion > 3) {
             return 0;
@@ -742,6 +741,7 @@ public class SeguimientoService {
         dashboard.setRachaDiasEntrenando(calcularRachaDias(socio.getIdUsuario()));
         dashboard.setPorcentajeCumplimientoSemanal(calcularCumplimientoSemanal(socio.getIdUsuario()));
         dashboard.setPorcentajeCumplimientoSemanaAnterior(calcularCumplimientoSemanaAnterior(socio.getIdUsuario()));
+        dashboard.setDiasEntrenadosSemana(calcularDiasEntrenadosSemana(socio.getIdUsuario()));
         dashboard.setEvolucionEjercicios(calcularEvolucionEjercicios(socio.getIdUsuario()));
 
         Map<String, Object> estadisticas = new HashMap<>();
