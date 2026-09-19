@@ -9,6 +9,7 @@ import com.pulse_gym.lb_common.client.AuthServiceClient;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.PerfilMedicoRequestDTO;
 import com.pulse_gym.lb_common.dto.PerfilMedicoResponseDTO;
+import com.pulse_gym.lb_common.entity.user.HistorialFisico;
 import com.pulse_gym.lb_common.entity.user.PerfilMedico;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
 import com.pulse_gym.lb_common.enums.EnumEstadoDocumentoLegal;
@@ -17,6 +18,7 @@ import com.pulse_gym.lb_common.enums.EnumTipoDocumentoLegal;
 import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_users.repository.DocumentoLegalRepository;
+import com.pulse_gym.ms_users.repository.HistorialFisicoRepository;
 import com.pulse_gym.ms_users.repository.PerfilMedicoRepository;
 import com.pulse_gym.ms_users.repository.UsuarioPerfilRepository;
 
@@ -35,6 +37,9 @@ public class PerfilMedicoService {
     /** Repositorio de documentos legales */
     private final DocumentoLegalRepository documentoLegalRepository;
 
+    /** Repositorio de historial físico */
+    private final HistorialFisicoRepository historialFisicoRepository;
+
     /** Cliente Feign para consultar el servicio de autenticación */
     private final AuthServiceClient authServiceClient;
 
@@ -42,7 +47,8 @@ public class PerfilMedicoService {
      * Valida que el socio tenga un consentimiento informado vigente
      * 
      * @param idSocio ID del socio a validar
-     * @throws RuntimeException               Si el socio no existe
+     * @throws RuntimeException               Si el socio no existe o no tiene rol
+     *                                        socio
      * @throws SecurityAuthorizationException Si no tiene consentimiento informado
      *                                        vigente
      */
@@ -68,6 +74,41 @@ public class PerfilMedicoService {
     }
 
     /**
+     * Construye el DTO de respuesta a partir de la entidad PerfilMedico
+     * 
+     * @param perfilMedico Entidad a convertir
+     * @return DTO del perfil médico con datos de la última medición
+     */
+    private PerfilMedicoResponseDTO construirResponseDTO(PerfilMedico perfilMedico) {
+        UsuarioPerfil socio = perfilMedico.getSocio();
+        PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
+
+        dto.setIdPerfilMedico(perfilMedico.getIdPerfilMedico());
+        dto.setIdSocio(socio.getIdUsuario());
+        dto.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
+        dto.setAlergias(perfilMedico.getAlergias());
+        dto.setCondicionesCronicas(perfilMedico.getCondicionesCronicas());
+        dto.setLesionesPrevias(perfilMedico.getLesionesPrevias());
+        dto.setFechaActualizacion(perfilMedico.getFechaActualizacion());
+
+        HistorialFisico ultimaMedicion = historialFisicoRepository.findLastMedicionBySocio(socio.getIdUsuario());
+
+        if (ultimaMedicion != null) {
+            dto.setPesoKg(ultimaMedicion.getPesoKg());
+            if (ultimaMedicion.getAlturaCm() != null) {
+                dto.setEstaturaCm(ultimaMedicion.getAlturaCm().shortValue());
+            }
+            dto.setPorcentajeGrasa(ultimaMedicion.getPorcentajeGrasa());
+        } else {
+            dto.setPesoKg(null);
+            dto.setEstaturaCm(null);
+            dto.setPorcentajeGrasa(null);
+        }
+
+        return dto;
+    }
+
+    /**
      * Registra un nuevo perfil médico para un socio
      * 
      * @param requestDTO Datos del perfil médico
@@ -76,6 +117,8 @@ public class PerfilMedicoService {
      * @return Mensaje de confirmación
      * @throws SecurityAuthorizationException Si el usuario no tiene permisos o
      *                                        falta consentimiento
+     * @throws RuntimeException               Si el socio ya tiene perfil activo o
+     *                                        no existe
      */
     @Transactional
     public MessegeGlobalDTO registrarPerfilMedico(PerfilMedicoRequestDTO requestDTO, String userRol, String userEmail) {
@@ -105,12 +148,9 @@ public class PerfilMedicoService {
 
         PerfilMedico perfilMedico = new PerfilMedico();
         perfilMedico.setSocio(socio);
-        perfilMedico.setPesoKg(requestDTO.getPesoKg());
-        perfilMedico.setEstaturaCm(requestDTO.getEstaturaCm());
         perfilMedico.setAlergias(requestDTO.getAlergias());
         perfilMedico.setCondicionesCronicas(requestDTO.getCondicionesCronicas());
         perfilMedico.setLesionesPrevias(requestDTO.getLesionesPrevias());
-        perfilMedico.setPorcentajeGrasa(requestDTO.getPorcentajeGrasa());
         perfilMedico.setActivo(true);
 
         perfilMedicoRepository.save(perfilMedico);
@@ -132,24 +172,11 @@ public class PerfilMedicoService {
 
         Page<PerfilMedico> perfilesPage = perfilMedicoRepository.consultarPerfilesMedicosPaginados(busqueda, pageable);
 
-        return perfilesPage.map(perfil -> {
-            PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
-            dto.setIdPerfilMedico(perfil.getIdPerfilMedico());
-            dto.setIdSocio(perfil.getSocio().getIdUsuario());
-            dto.setNombreSocio(perfil.getSocio().getNombre() + " " + perfil.getSocio().getApellido());
-            dto.setPesoKg(perfil.getPesoKg());
-            dto.setEstaturaCm(perfil.getEstaturaCm());
-            dto.setAlergias(perfil.getAlergias());
-            dto.setCondicionesCronicas(perfil.getCondicionesCronicas());
-            dto.setLesionesPrevias(perfil.getLesionesPrevias());
-            dto.setPorcentajeGrasa(perfil.getPorcentajeGrasa());
-            dto.setFechaActualizacion(perfil.getFechaActualizacion());
-            return dto;
-        });
+        return perfilesPage.map(this::construirResponseDTO);
     }
 
     /**
-     * Consulta el perfil médico de un socio
+     * Consulta el perfil médico de un socio específico
      * 
      * @param idSocio   ID del socio
      * @param userRol   Rol del usuario autenticado
@@ -168,21 +195,7 @@ public class PerfilMedicoService {
                 .orElseThrow(
                         () -> new RuntimeException("Perfil médico activo no encontrado para el socio: " + idSocio));
 
-        UsuarioPerfil socio = perfilMedico.getSocio();
-
-        PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
-        dto.setIdPerfilMedico(perfilMedico.getIdPerfilMedico());
-        dto.setIdSocio(socio.getIdUsuario());
-        dto.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
-        dto.setPesoKg(perfilMedico.getPesoKg());
-        dto.setEstaturaCm(perfilMedico.getEstaturaCm());
-        dto.setAlergias(perfilMedico.getAlergias());
-        dto.setCondicionesCronicas(perfilMedico.getCondicionesCronicas());
-        dto.setLesionesPrevias(perfilMedico.getLesionesPrevias());
-        dto.setPorcentajeGrasa(perfilMedico.getPorcentajeGrasa());
-        dto.setFechaActualizacion(perfilMedico.getFechaActualizacion());
-
-        return dto;
+        return construirResponseDTO(perfilMedico);
     }
 
     /**
@@ -191,6 +204,8 @@ public class PerfilMedicoService {
      * @param userRol   Rol del usuario autenticado
      * @param userEmail Email del usuario autenticado
      * @return DTO del perfil médico
+     * @throws SecurityAuthorizationException Si el usuario no es socio o falta
+     *                                        email
      */
     @Transactional(readOnly = true)
     public PerfilMedicoResponseDTO consultarMiPerfilMedico(String userRol, String userEmail) {
@@ -209,19 +224,7 @@ public class PerfilMedicoService {
         PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuarioAndActivoTrue(socio.getIdUsuario())
                 .orElseThrow(() -> new RuntimeException("Perfil médico no encontrado para el socio autenticado"));
 
-        PerfilMedicoResponseDTO dto = new PerfilMedicoResponseDTO();
-        dto.setIdPerfilMedico(perfilMedico.getIdPerfilMedico());
-        dto.setIdSocio(socio.getIdUsuario());
-        dto.setNombreSocio(socio.getNombre() + " " + socio.getApellido());
-        dto.setPesoKg(perfilMedico.getPesoKg());
-        dto.setEstaturaCm(perfilMedico.getEstaturaCm());
-        dto.setAlergias(perfilMedico.getAlergias());
-        dto.setCondicionesCronicas(perfilMedico.getCondicionesCronicas());
-        dto.setLesionesPrevias(perfilMedico.getLesionesPrevias());
-        dto.setPorcentajeGrasa(perfilMedico.getPorcentajeGrasa());
-        dto.setFechaActualizacion(perfilMedico.getFechaActualizacion());
-
-        return dto;
+        return construirResponseDTO(perfilMedico);
     }
 
     /**
@@ -255,12 +258,6 @@ public class PerfilMedicoService {
                 .orElseThrow(
                         () -> new RuntimeException("Perfil médico activo no encontrado para el socio: " + idSocio));
 
-        if (requestDTO.getPesoKg() != null) {
-            perfilMedico.setPesoKg(requestDTO.getPesoKg());
-        }
-        if (requestDTO.getEstaturaCm() != null) {
-            perfilMedico.setEstaturaCm(requestDTO.getEstaturaCm());
-        }
         if (requestDTO.getAlergias() != null) {
             perfilMedico.setAlergias(requestDTO.getAlergias());
         }
@@ -270,9 +267,6 @@ public class PerfilMedicoService {
         if (requestDTO.getLesionesPrevias() != null) {
             perfilMedico.setLesionesPrevias(requestDTO.getLesionesPrevias());
         }
-        if (requestDTO.getPorcentajeGrasa() != null) {
-            perfilMedico.setPorcentajeGrasa(requestDTO.getPorcentajeGrasa());
-        }
 
         perfilMedicoRepository.save(perfilMedico);
 
@@ -280,7 +274,7 @@ public class PerfilMedicoService {
     }
 
     /**
-     * Actualiza el perfil médico del socio autenticado basándose en su token
+     * Actualiza el perfil médico del socio autenticado
      * 
      * @param requestDTO Datos a actualizar
      * @param userRol    Rol del usuario autenticado
@@ -302,31 +296,7 @@ public class PerfilMedicoService {
         UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
 
-        PerfilMedico perfilMedico = perfilMedicoRepository.findBySocio_IdUsuarioAndActivoTrue(socio.getIdUsuario())
-                .orElseThrow(() -> new RuntimeException("Perfil médico no encontrado para el socio autenticado"));
-
-        if (requestDTO.getPesoKg() != null) {
-            perfilMedico.setPesoKg(requestDTO.getPesoKg());
-        }
-        if (requestDTO.getEstaturaCm() != null) {
-            perfilMedico.setEstaturaCm(requestDTO.getEstaturaCm());
-        }
-        if (requestDTO.getAlergias() != null) {
-            perfilMedico.setAlergias(requestDTO.getAlergias());
-        }
-        if (requestDTO.getCondicionesCronicas() != null) {
-            perfilMedico.setCondicionesCronicas(requestDTO.getCondicionesCronicas());
-        }
-        if (requestDTO.getLesionesPrevias() != null) {
-            perfilMedico.setLesionesPrevias(requestDTO.getLesionesPrevias());
-        }
-        if (requestDTO.getPorcentajeGrasa() != null) {
-            perfilMedico.setPorcentajeGrasa(requestDTO.getPorcentajeGrasa());
-        }
-
-        perfilMedicoRepository.save(perfilMedico);
-
-        return new MessegeGlobalDTO("Perfil médico actualizado correctamente");
+        return actualizarPerfilMedico(socio.getIdUsuario(), requestDTO, userRol, userEmail);
     }
 
     /**
