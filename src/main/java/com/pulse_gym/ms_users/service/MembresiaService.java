@@ -399,6 +399,7 @@ public class MembresiaService {
      */
     private MembresiaConSociosDTO convertirAMembresiaConSociosDTO(Membresia membresia) {
         List<SocioAsignadoDTO> sociosDTO = membresia.getSocioMembresias().stream()
+                .filter(sm -> sm.getEstado() != null && sm.getEstado().name().equals("ACTIVA"))
                 .map(this::convertirSocioMembresiaASocioAsignadoDTO)
                 .collect(Collectors.toList());
 
@@ -569,7 +570,7 @@ public class MembresiaService {
             String userRol) {
         ValidacionDeRoles.validarCualquierRol(userRol);
 
-        Page<MembresiaConSociosDTO> membresiasPaginadas = consultarTodasMembresiasConSociosActivosPaginadas(
+        Page<MembresiaConSociosDTO> membresiasPaginadas = consultarTodasMembresiasConSociosPaginadas(
                 pageableMembresias, userRol);
         Page<MembresiaPorVencerDTO> porVencerPaginadas = socioMembresiaService.obtenerMembresiasPorVencerPaginadas(1, 5,
                 pageablePorVencer);
