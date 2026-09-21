@@ -49,6 +49,12 @@ public class UsuarioPerfilService {
     /** Cliente para interactuar con el servicio de autenticación */
     private final AuthServiceClient authServiceClient;
 
+    /**
+     * Dispara la notificacion de bienvenida en un bean aparte para que @Async
+     * funcione de verdad (ver NotificacionAsyncTrigger para el detalle).
+     */
+    private final NotificacionAsyncTrigger notificacionAsyncTrigger;
+
     /** Cliente para interactuar con el servicio de autenticación (Feign) */
     private final AuthClient authClient;
 
@@ -400,33 +406,9 @@ public class UsuarioPerfilService {
             }
         }
 
-        enviarNotificacionBienvenida(usuario);
+        notificacionAsyncTrigger.enviarNotificacionBienvenida(usuario);
 
         return new MessegeGlobalDTO("Perfil completado correctamente");
-    }
-
-    /**
-     * Envía una notificación de bienvenida al usuario completando el perfil
-     * 
-     * @param usuario Usuario al que enviar la notificación
-     */
-    private void enviarNotificacionBienvenida(UsuarioPerfil usuario) {
-        try {
-            AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(usuario.getEmail());
-            if (authUser == null) {
-                return;
-            }
-
-            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
-            eventoDTO.setUsuarioId(authUser.getId());
-            eventoDTO.setEvento(EnumEventoAsociado.WELCOME);
-            eventoDTO.setVariablesAdicionales(java.util.Map.of(
-                    "nombre", usuario.getNombre(),
-                    "apellido", usuario.getApellido() != null ? usuario.getApellido() : ""));
-            notificacionClient.enviarPorEvento(eventoDTO);
-        } catch (Exception e) {
-            // Error silencioso, no interrumpir el flujo principal
-        }
     }
 
     /**
