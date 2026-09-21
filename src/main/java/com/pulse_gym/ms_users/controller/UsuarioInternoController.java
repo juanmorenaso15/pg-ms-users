@@ -1,5 +1,7 @@
 package com.pulse_gym.ms_users.controller;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,6 +46,17 @@ public class UsuarioInternoController {
     public ResponseEntity<UsuarioPerfilResponseDTO> obtenerPorId(@PathVariable Long idUsuario) {
         UsuarioPerfilResponseDTO usuario = usuarioPerfilService.obtenerUsuarioPorIdInterno(idUsuario);
         return ResponseEntity.ok(usuario);
+    }
+
+    /**
+     * Obtiene todos los perfiles con telefono registrado, sin validacion de
+     * roles (peticion interna entre microservicios).
+     *
+     * @return Lista de perfiles con telefono no nulo/vacio
+     */
+    @GetMapping("/con-telefono")
+    public ResponseEntity<List<UsuarioPerfilResponseDTO>> obtenerTodosConTelefono() {
+        return ResponseEntity.ok(usuarioPerfilService.obtenerTodosConTelefonoInterno());
     }
 
     /**

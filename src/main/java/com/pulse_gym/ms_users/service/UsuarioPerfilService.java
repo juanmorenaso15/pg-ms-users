@@ -487,6 +487,26 @@ public class UsuarioPerfilService {
     }
 
     /**
+     * Obtiene todos los perfiles que tengan un numero de telefono registrado,
+     * sin validacion de roles: es una peticion interna entre microservicios
+     * (usada por pg-ms-notifications para avisos que le interesan a todo el
+     * mundo, como que un equipo entro en mantenimiento).
+     *
+     * @return Lista de perfiles con telefono no nulo/vacio
+     */
+    @Transactional(readOnly = true)
+    public List<UsuarioPerfilResponseDTO> obtenerTodosConTelefonoInterno() {
+        return usuarioRepository.findAll().stream()
+                .filter(usuario -> usuario.getTelefono() != null && !usuario.getTelefono().isBlank())
+                .map(usuario -> {
+                    UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
+                    enrichWithRol(dto, usuario);
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Obtiene un usuario por email (uso interno)
      * 
      * @param email Email del usuario
