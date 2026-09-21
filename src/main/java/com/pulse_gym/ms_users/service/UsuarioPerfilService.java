@@ -26,6 +26,7 @@ import com.pulse_gym.lb_common.dto.RegistroCompletoSocioRequestDTO;
 import com.pulse_gym.lb_common.dto.RegistroCompletoSocioResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistroHuellaRequestDTO;
 import com.pulse_gym.lb_common.dto.SocioMembresiaResponseDTO;
+import com.pulse_gym.lb_common.dto.UsuarioMetricasResponseDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilUpdateDTO;
 import com.pulse_gym.lb_common.entity.user.UsuarioPerfil;
@@ -67,7 +68,7 @@ public class UsuarioPerfilService {
     private final SocioMembresiaService socioMembresiaService;
     private final SocioMembresiaRepository socioMembresiaRepository;
 
-    private  final EquipoClient equipoClient;
+    private final EquipoClient equipoClient;
 
     /**
      * Convierte una entidad UsuarioPerfil a UsuarioPerfilResponseDTO
@@ -1213,5 +1214,66 @@ public class UsuarioPerfilService {
             enrichWithRol(dto, usuario);
             return dto;
         });
+    }
+
+    /**
+     * Obtiene las métricas de usuarios del sistema agrupadas por rol
+     * 
+     * @param userRol Rol del usuario autenticado
+     * @return DTO con las métricas (totales y por rol)
+     */
+    @Transactional(readOnly = true)
+    public UsuarioMetricasResponseDTO obtenerMetricasUsuarios(String userRol) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        long totalUsuarios = usuarioRepository.count();
+        long totalInactivos = usuarioRepository.countByEstado(EnumEstadoUsuario.INACTIVO);
+
+        long countAdmin = 0;
+        long countEntrenador = 0;
+        long countRecepcionista = 0;
+        long countSocio = 0;
+
+        try {
+            List<AuthUserDTO> authUsers = authServiceClient.obtenerTodosLosUsuarios();
+            if (authUsers != null && !authUsers.isEmpty()) {
+                List<UsuarioPerfil> usuariosActivos = usuarioRepository.findByEstado(EnumEstadoUsuario.ACTIVO);
+
+                Map<String, EnumRol> rolPorEmail = authUsers.stream()
+                        .filter(u -> u.getEmail() != null && u.getRol() != null)
+                        .collect(Collectors.toMap(AuthUserDTO::getEmail, AuthUserDTO::getRol, (r1, r2) -> r1));
+
+                for (UsuarioPerfil usuario : usuariosActivos) {
+                    EnumRol rol = rolPorEmail.get(usuario.getEmail());
+                    if (rol != null) {
+                        switch (rol) {
+                            case administrador:
+                                countAdmin++;
+                                break;
+                            case entrenador:
+                                countEntrenador++;
+                                break;
+                            case recepcionista:
+                                countRecepcionista++;
+                                break;
+                            case socio:
+                                countSocio++;
+                                break;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("No se pudieron calcular los roles para las métricas desde Auth: {}", e.getMessage());
+        }
+
+        return UsuarioMetricasResponseDTO.builder()
+                .totalUsuarios(totalUsuarios)
+                .totalInactivos(totalInactivos)
+                .totalAdministradores(countAdmin)
+                .totalEntrenadores(countEntrenador)
+                .totalRecepcionistas(countRecepcionista)
+                .totalSocios(countSocio)
+                .build();
     }
 }
