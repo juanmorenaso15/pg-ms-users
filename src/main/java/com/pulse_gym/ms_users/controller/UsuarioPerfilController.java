@@ -27,6 +27,7 @@ import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
 import com.pulse_gym.lb_common.dto.RegistroCompletoSocioRequestDTO;
 import com.pulse_gym.lb_common.dto.RegistroCompletoSocioResponseDTO;
 import com.pulse_gym.lb_common.dto.RegistroHuellaRequestDTO;
+import com.pulse_gym.lb_common.dto.UsuarioMetricasResponseDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilUpdateDTO;
 import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
@@ -507,6 +508,27 @@ public class UsuarioPerfilController {
             e.printStackTrace();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al obtener usuarios paginados", e);
+        }
+    }
+
+    /**
+     * Obtiene las métricas de usuarios del sistema agrupadas por rol
+     * 
+     * @param userRol Rol del usuario autenticado (header)
+     * @return DTO con las métricas (totales y por rol)
+     */
+    @GetMapping("/metricas")
+    public ResponseEntity<UsuarioMetricasResponseDTO> obtenerMetricasUsuarios(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            UsuarioMetricasResponseDTO metricas = usuarioService.obtenerMetricasUsuarios(userRol);
+            return ResponseEntity.ok(metricas);
+        } catch (SecurityAuthorizationException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener las métricas de usuarios", e);
         }
     }
 }
