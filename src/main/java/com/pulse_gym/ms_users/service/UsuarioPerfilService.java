@@ -49,6 +49,12 @@ public class UsuarioPerfilService {
     /** Cliente para interactuar con el servicio de autenticación */
     private final AuthServiceClient authServiceClient;
 
+    /**
+     * Dispara la notificacion de bienvenida en un bean aparte para que @Async
+     * funcione de verdad (ver NotificacionAsyncTrigger para el detalle).
+     */
+    private final NotificacionAsyncTrigger notificacionAsyncTrigger;
+
     /** Cliente para interactuar con el servicio de autenticación (Feign) */
     private final AuthClient authClient;
 
@@ -400,33 +406,9 @@ public class UsuarioPerfilService {
             }
         }
 
-        enviarNotificacionBienvenida(usuario);
+        notificacionAsyncTrigger.enviarNotificacionBienvenida(usuario);
 
         return new MessegeGlobalDTO("Perfil completado correctamente");
-    }
-
-    /**
-     * Envía una notificación de bienvenida al usuario completando el perfil
-     * 
-     * @param usuario Usuario al que enviar la notificación
-     */
-    private void enviarNotificacionBienvenida(UsuarioPerfil usuario) {
-        try {
-            AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorEmail(usuario.getEmail());
-            if (authUser == null) {
-                return;
-            }
-
-            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
-            eventoDTO.setUsuarioId(authUser.getId());
-            eventoDTO.setEvento(EnumEventoAsociado.WELCOME);
-            eventoDTO.setVariablesAdicionales(java.util.Map.of(
-                    "nombre", usuario.getNombre(),
-                    "apellido", usuario.getApellido() != null ? usuario.getApellido() : ""));
-            notificacionClient.enviarPorEvento(eventoDTO);
-        } catch (Exception e) {
-            // Error silencioso, no interrumpir el flujo principal
-        }
     }
 
     /**
@@ -478,6 +460,26 @@ public class UsuarioPerfilService {
         ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
 
         return usuarioRepository.findAll().stream()
+                .map(usuario -> {
+                    UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
+                    enrichWithRol(dto, usuario);
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Obtiene todos los perfiles que tengan un numero de telefono registrado,
+     * sin validacion de roles: es una peticion interna entre microservicios
+     * (usada por pg-ms-notifications para avisos que le interesan a todo el
+     * mundo, como que un equipo entro en mantenimiento).
+     *
+     * @return Lista de perfiles con telefono no nulo/vacio
+     */
+    @Transactional(readOnly = true)
+    public List<UsuarioPerfilResponseDTO> obtenerTodosConTelefonoInterno() {
+        return usuarioRepository.findAll().stream()
+                .filter(usuario -> usuario.getTelefono() != null && !usuario.getTelefono().isBlank())
                 .map(usuario -> {
                     UsuarioPerfilResponseDTO dto = convertirADTO(usuario);
                     enrichWithRol(dto, usuario);
