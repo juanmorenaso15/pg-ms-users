@@ -428,4 +428,39 @@ public class SeguimientoController {
                     "Error al exportar plan nutricional específico a PDF", e);
         }
     }
+
+    /**
+     * Obtiene el historial de sesiones del socio autenticado
+     * Usa el email del token para identificar al socio
+     * 
+     * @param userRol   Rol del usuario autenticado (header)
+     * @param userEmail Email del usuario autenticado (header) - Se extrae del token
+     * @return Lista de sesiones del socio autenticado
+     */
+    @GetMapping("/historial/mi-historial")
+    public ResponseEntity<List<SesionResponseDTO>> obtenerMiHistorial(
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
+        try {
+            log.info("Obteniendo historial de sesiones para socio autenticado con email: {}", userEmail);
+
+            // 1. Buscamos el perfil del socio autenticado mediante su email del token
+            UsuarioPerfil socio = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Socio no encontrado con email: " + userEmail));
+
+            // 2. Reutilizamos el método existente pasando el ID del socio encontrado, su rol y su email
+            List<SesionResponseDTO> historial = seguimientoService.obtenerHistorialSesiones(
+                    socio.getIdUsuario(), userRol, userEmail);
+
+            return ResponseEntity.ok(historial);
+        } catch (SecurityAuthorizationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error al obtener historial del socio autenticado: {}", e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al obtener historial del socio autenticado", e);
+        }
+    }
 }
