@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulse_gym.lb_common.client.AiClient;
-import com.pulse_gym.lb_common.client.EquipoClient; // ✅ Importar EquipoClient
+import com.pulse_gym.lb_common.client.EquipoClient;
 import com.pulse_gym.lb_common.dto.EquipoResponseDTO;
 import com.pulse_gym.lb_common.dto.EstadoMembresiaResponseDTO;
 import com.pulse_gym.lb_common.dto.RutinaGeneracionRequestDTO;
@@ -40,53 +40,23 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class RutinaIAService {
 
-    /** Repositorio de usuarios */
     private final UsuarioPerfilRepository usuarioRepository;
-
-    /** Repositorio de perfiles médicos */
     private final PerfilMedicoRepository perfilMedicoRepository;
-
-    /** Repositorio de historial físico */
     private final HistorialFisicoRepository historialFisicoRepository;
-
-    /** Repositorio de ejercicios */
     private final EjercicioRepository ejercicioRepository;
-
-    /** Repositorio de membresías de socios */
     private final SocioMembresiaRepository socioMembresiaRepository;
-
-    /** Repositorio de rutinas */
     private final RutinaRepository rutinaRepository;
-
-    /** Repositorio de detalles de rutina */
     private final DetalleRutinaRepository detalleRutinaRepository;
-
-    /** Cliente Feign para consumir el servicio de IA */
     private final AiClient aiClient;
-
-    /** Cliente Feign para consumir el servicio de equipos */
-    private final EquipoClient equipoClient; // ✅ Agregar EquipoClient
-
-    /** Mapper para convertir objetos a JSON */
+    private final EquipoClient equipoClient;
     private final ObjectMapper objectMapper;
 
-    /**
-     * Calcula la edad a partir de la fecha de nacimiento
-     * 
-     * @param fechaNacimiento Fecha de nacimiento
-     * @return Edad en años, o 0 si la fecha es nula
-     */
     private int calcularEdad(LocalDate fechaNacimiento) {
         if (fechaNacimiento == null)
             return 0;
         return Period.between(fechaNacimiento, com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()).getYears();
     }
 
-    /**
-     * Valida que el socio tenga una membresía activa
-     * 
-     * @param idSocio ID del socio a validar
-     */
     public void validarMembresiaActiva(Long idSocio) {
         log.info("Validando membresía activa para socio ID: {}", idSocio);
 
@@ -103,12 +73,6 @@ public class RutinaIAService {
                 idSocio, membresiaActiva.getFechaVencimiento());
     }
 
-    /**
-     * Obtiene el estado de la membresía de un socio
-     * 
-     * @param idSocio ID del socio a consultar
-     * @return DTO con el estado de la membresía
-     */
     public EstadoMembresiaResponseDTO obtenerEstadoMembresia(Long idSocio) {
         SocioMembresia membresiaActiva = socioMembresiaRepository.findMembresiaActivaBySocio(idSocio)
                 .orElse(null);
@@ -213,13 +177,17 @@ public class RutinaIAService {
 
         datos.put("statsEjercicios", statsEjercicios);
 
-        log.info("Datos recopilados para socio ID: {} - {} campos, {} equipos disponibles",
+        log.info("Datos recopilados para socio ID: {} - {} campos, {} equipos disponibles válidos",
                 idSocio, datos.size(), equiposDisponibles.size());
         return datos;
     }
 
     /**
-     * Obtiene los equipos disponibles en la sede del socio desde operation
+     * Obtiene los equipos disponibles en la sede del socio desde operation.
+     * Filtra equipos operativos y descarta cualquier registro incompleto
+     * (nombre nulo/vacío) que pueda venir por un mapeo incorrecto del DTO,
+     * ya que enviarle a la IA equipos sin nombre hace que los ignore por
+     * completo y termine generando siempre rutinas de peso corporal.
      * 
      * @param idSede ID de la sede
      * @return Lista de equipos en formato para IA
@@ -234,27 +202,41 @@ public class RutinaIAService {
                 equipos = equipoClient.obtenerTodosLosEquipos();
             }
 
+            // Log de diagnóstico: nos permite ver EXACTAMENTE qué llega desde ms-operation
+            if (equipos != null) {
+                log.info("Equipos crudos recibidos de ms-operation (sede {}): {}", idSede, equipos.size());
+                equipos.forEach(e -> log.info(
+                        "  -> idEquipo={}, nombreEquipo='{}', estado='{}', descripcion='{}', idSede={}",
+                        e.getIdEquipo(), e.getNombreEquipo(), e.getEstado(), e.getDescripcion(), e.getIdSede()));
+            } else {
+                log.warn("ms-operation devolvió null en la lista de equipos para sede {}", idSede);
+            }
+
             if (equipos != null && !equipos.isEmpty()) {
                 equiposFormat = equipos.stream()
-                        .filter(e -> "OPERATIVO".equals(e.getEstado()))
+                        .filter(e -> e.getEstado() != null && "OPERATIVO".equalsIgnoreCase(e.getEstado().trim()))
+                        .filter(e -> e.getNombreEquipo() != null && !e.getNombreEquipo().trim().isEmpty())
                         .map(this::convertirEquipoParaIA)
                         .collect(Collectors.toList());
-                log.info("Se encontraron {} equipos operativos en la sede {}", equiposFormat.size(), idSede);
+
+                if (equiposFormat.isEmpty()) {
+                    log.error("ATENCIÓN: ms-operation devolvió {} equipos pero NINGUNO quedó válido " +
+                            "tras el filtro (revisar si el DTO se está mapeando correctamente, " +
+                            "posible mismatch de nombres de campo en el JSON de respuesta).",
+                            equipos.size());
+                } else {
+                    log.info("Se encontraron {} equipos operativos y válidos en la sede {}",
+                            equiposFormat.size(), idSede);
+                }
             } else {
                 log.warn("No se encontraron equipos en la sede {}", idSede);
             }
         } catch (Exception e) {
-            log.error("Error al obtener equipos desde operation: {}", e.getMessage());
+            log.error("Error al obtener equipos desde ms-operation (sede {}): {}", idSede, e.getMessage(), e);
         }
         return equiposFormat;
     }
 
-    /**
-     * Convierte un EquipoResponseDTO a formato para IA
-     * 
-     * @param equipo DTO del equipo
-     * @return Mapa con los datos del equipo
-     */
     private Map<String, Object> convertirEquipoParaIA(EquipoResponseDTO equipo) {
         Map<String, Object> eq = new HashMap<>();
         eq.put("id", equipo.getIdEquipo());
@@ -277,14 +259,6 @@ public class RutinaIAService {
         return ej;
     }
 
-    /**
-     * Valida que el usuario tenga permisos para generar rutinas
-     * 
-     * @param userRol           Rol del usuario autenticado
-     * @param idSocio           ID del socio para el que se genera la rutina
-     * @param userIdAutenticado ID del usuario autenticado
-     * @throws SecurityAuthorizationException Si el usuario no tiene permisos
-     */
     public void validarRolGeneracion(String userRol, Long idSocio, Long userIdAutenticado, String userEmail) {
         if (userRol == null) {
             throw new SecurityAuthorizationException("Usuario no autenticado");
@@ -319,13 +293,6 @@ public class RutinaIAService {
                 "Acceso denegado. Rol '" + userRol + "' no autorizado para generar rutinas");
     }
 
-    /**
-     * Construye el contexto con los datos del socio y preferencias para la IA
-     * 
-     * @param idSocio ID del socio
-     * @param request Preferencias del socio para la rutina
-     * @return Mapa con el contexto completo para la IA
-     */
     public Map<String, Object> construirContextoIA(Long idSocio, RutinaGeneracionRequestDTO request) {
         Map<String, Object> contexto = recopilarDatosSocio(idSocio);
 
