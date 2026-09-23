@@ -134,7 +134,7 @@ public class PerfilMedicoService {
                         "No tienes permisos para crear el perfil médico de otro usuario.");
             }
         } else {
-            ValidacionDeRoles.validarAdminORecepcionista(userRol);
+            ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
         }
 
         validarConsentimientoInformado(requestDTO.getIdSocio());
