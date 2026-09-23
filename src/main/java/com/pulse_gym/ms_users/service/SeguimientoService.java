@@ -227,7 +227,7 @@ public class SeguimientoService {
         return convertirAResponseDTO(sesion);
     }
 
-    public List<SesionResponseDTO> obtenerHistorialSesiones(Long idSocio, String userRol, String userEmail) {
+public List<SesionResponseDTO> obtenerHistorialSesiones(Long idSocio, String userRol, String userEmail) {
         UsuarioPerfil socio = usuarioRepository.findById(idSocio)
                 .orElseThrow(() -> new RuntimeException("Socio no encontrado"));
 
@@ -237,15 +237,10 @@ public class SeguimientoService {
             if (!socio.getIdUsuario().equals(autenticado.getIdUsuario())) {
                 throw new SecurityAuthorizationException("Solo puede ver su propio historial");
             }
-        } else if (EnumRol.entrenador.name().equals(userRol)) {
-            UsuarioPerfil entrenador = usuarioRepository.findByEmail(userEmail)
-                    .orElseThrow(() -> new RuntimeException("Entrenador no encontrado"));
-            boolean esAsignado = entrenadorSocioRepository
-                    .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(entrenador.getIdUsuario(), idSocio);
-            if (!esAsignado) {
-                throw new SecurityAuthorizationException("No tiene acceso al historial de este socio");
-            }
-        } else if (!EnumRol.administrador.name().equals(userRol)) {
+        } else if (EnumRol.entrenador.name().equals(userRol) || EnumRol.administrador.name().equals(userRol)) {
+            UsuarioPerfil staff = usuarioRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        } else {
             throw new SecurityAuthorizationException("No tiene permisos para ver este historial");
         }
 
@@ -264,13 +259,9 @@ public class SeguimientoService {
                 throw new SecurityAuthorizationException("Solo puede ver su propio dashboard");
             }
         } else if (EnumRol.entrenador.name().equals(userRol)) {
+            // Cualquier entrenador autenticado puede ver el dashboard de cualquier socio
             UsuarioPerfil entrenador = usuarioRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new RuntimeException("Entrenador no encontrado"));
-            boolean esAsignado = entrenadorSocioRepository
-                    .existsByEntrenador_IdUsuarioAndSocio_IdUsuarioAndActivaTrue(entrenador.getIdUsuario(), idSocio);
-            if (!esAsignado) {
-                throw new SecurityAuthorizationException("No tiene acceso al dashboard de este socio");
-            }
         } else if (!EnumRol.administrador.name().equals(userRol)) {
             throw new SecurityAuthorizationException("No tiene permisos para ver este dashboard");
         }
@@ -291,7 +282,6 @@ public class SeguimientoService {
 
         return dashboard;
     }
-
     public DashboardMonitoreoEntrenadorDTO obtenerDashboardMonitoreo(String userRol, String userEmail) {
         if (!EnumRol.entrenador.name().equals(userRol)) {
             throw new SecurityAuthorizationException("Solo entrenadores pueden acceder a este dashboard");
