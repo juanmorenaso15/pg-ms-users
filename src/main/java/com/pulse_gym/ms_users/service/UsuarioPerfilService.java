@@ -101,6 +101,7 @@ public class UsuarioPerfilService {
         dto.setEstado(usuario.getEstado());
         dto.setBiometricDeviceId(usuario.getBiometricDeviceId());
 
+        dto.setIdSede(usuario.getIdSede());
         dto.setNombreSede(obtenerNombreSedePorId(usuario.getIdSede()));
 
         return dto;
@@ -840,7 +841,7 @@ public class UsuarioPerfilService {
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         if (userRol.equals(EnumRol.socio.name())) {
-            AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorId(userIdAutenticado);
+            AuthUserDTO authUser = authClient.obtenerUsuarioPorId(userIdAutenticado);
             if (authUser == null) {
                 throw new SecurityAuthorizationException("Usuario autenticado no encontrado");
             }
@@ -884,7 +885,7 @@ public class UsuarioPerfilService {
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         if (userRol.equals(EnumRol.socio.name())) {
-            AuthUserDTO authUser = authServiceClient.obtenerUsuarioPorId(userIdAutenticado);
+            AuthUserDTO authUser = authClient.obtenerUsuarioPorId(userIdAutenticado);
             if (authUser == null) {
                 throw new SecurityAuthorizationException("Usuario autenticado no encontrado");
             }
