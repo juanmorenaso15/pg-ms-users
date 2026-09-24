@@ -190,7 +190,6 @@ public class PagoService {
 
             MPRequestOptions requestOptions = MPRequestOptions.builder()
                     .accessToken(getAccessTokenValidado())
-                    .customHeaders(Map.of("X-Idempotency-Key", idempotencyKey))
                     .build();
 
             IdentificationRequest identification = IdentificationRequest.builder()
@@ -310,9 +309,10 @@ public class PagoService {
                         : 30;
 
                 LocalDate fechaBase = (socioMembresia.getFechaVencimiento() != null
-                        && socioMembresia.getFechaVencimiento().isAfter(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()))
-                                ? socioMembresia.getFechaVencimiento()
-                                : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
+                        && socioMembresia.getFechaVencimiento()
+                                .isAfter(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()))
+                                        ? socioMembresia.getFechaVencimiento()
+                                        : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
 
                 socioMembresia.setFechaVencimiento(fechaBase.plusDays(diasASumar));
                 socioMembresia.setEstado(EnumEstadoSocioMembresia.ACTIVA);
@@ -527,9 +527,10 @@ public class PagoService {
                                 : 30);
 
                 LocalDate fechaBase = (socioMembresia.getFechaVencimiento() != null
-                        && socioMembresia.getFechaVencimiento().isAfter(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()))
-                                ? socioMembresia.getFechaVencimiento()
-                                : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
+                        && socioMembresia.getFechaVencimiento()
+                                .isAfter(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate()))
+                                        ? socioMembresia.getFechaVencimiento()
+                                        : com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toLocalDate();
 
                 socioMembresia.setFechaVencimiento(fechaBase.plusDays(diasASumar));
 
