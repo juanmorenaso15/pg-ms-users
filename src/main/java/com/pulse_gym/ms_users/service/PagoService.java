@@ -279,6 +279,8 @@ public class PagoService {
             log.error("-> HTTP Status Code de MP: {}", apiException.getStatusCode());
             if (apiException.getApiResponse() != null) {
                 log.error("-> Contenido JSON de respuesta MP: {}", apiException.getApiResponse().getContent());
+                log.error("-> x-request-id de MP (para soporte): {}",
+                        obtenerHeaderCaseInsensitive(apiException.getApiResponse().getHeaders(), "x-request-id"));
             } else {
                 log.error("-> Mensaje de excepción MP: {}", apiException.getMessage());
             }
@@ -412,6 +414,28 @@ public class PagoService {
                     "MERCADOPAGO_ACCESS_TOKEN no está configurado. Verifica las variables de entorno.");
         }
         return mpAccessToken.trim();
+    }
+
+    /**
+     * Busca un header de forma insensible a mayúsculas/minúsculas en la respuesta
+     * HTTP de Mercado Pago. Útil para extraer "x-request-id" y adjuntarlo a
+     * reportes de soporte cuando MP responde con un internal_error sin detalle.
+     *
+     * @param headers    Headers de la respuesta de MP
+     * @param headerName Nombre del header a buscar
+     * @return Valor del header o "desconocido" si no está presente
+     */
+    private String obtenerHeaderCaseInsensitive(Map<String, List<String>> headers, String headerName) {
+        if (headers == null) {
+            return "desconocido";
+        }
+        return headers.entrySet().stream()
+                .filter(entry -> entry.getKey().equalsIgnoreCase(headerName))
+                .map(Map.Entry::getValue)
+                .filter(values -> values != null && !values.isEmpty())
+                .map(values -> values.get(0))
+                .findFirst()
+                .orElse("desconocido");
     }
 
     /**
