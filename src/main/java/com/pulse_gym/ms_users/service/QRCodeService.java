@@ -51,7 +51,7 @@ public class QRCodeService {
      * @return Array de bytes con la imagen PNG del QR
      */
     public byte[] generarQRComprobante(Long pagoId) {
-        String url = "https://front-end-pulsegym.pages.dev/comprobante/idPago=" + pagoId;
+        String url = "https://pulsegym.uk/comprobante/idPago=" + pagoId;
 
         return generateQRCode(url, 150, 150);
     }

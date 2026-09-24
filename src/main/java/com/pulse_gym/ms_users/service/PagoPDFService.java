@@ -166,7 +166,7 @@ public class PagoPDFService {
             document.add(new Paragraph(" ").setFontSize(6));
 
             try {
-                String qrTargetUrl = "https://front-end-pulsegym.pages.dev/auth/login?idPago=" + pago.getIdPago();
+                String qrTargetUrl = "https://pulsegym.uk/auth/login?idPago=" + pago.getIdPago();
 
                 byte[] qrBytes = qrCodeService.generarQRComprobante(pago.getIdPago());
 
@@ -211,7 +211,7 @@ public class PagoPDFService {
                     .setFontColor(new DeviceRgb(127, 140, 141));
             document.add(footer1);
 
-            Paragraph footer2 = new Paragraph("Plataforma web: https://front-end-pulsegym.pages.dev")
+            Paragraph footer2 = new Paragraph("Plataforma web: https://pulsegym.uk")
                     .setFontSize(8)
                     .setBold()
                     .setTextAlignment(TextAlignment.CENTER)
