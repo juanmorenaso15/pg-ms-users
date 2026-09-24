@@ -27,9 +27,13 @@ import org.springframework.transaction.annotation.Transactional;
 import com.mercadopago.MercadoPagoConfig;
 import com.mercadopago.client.common.IdentificationRequest;
 import com.mercadopago.client.merchantorder.MerchantOrderClient;
+import com.mercadopago.client.order.OrderClient;
+import com.mercadopago.client.order.OrderCreateRequest;
+import com.mercadopago.client.order.OrderPayerRequest;
+import com.mercadopago.client.order.OrderPaymentMethodRequest;
+import com.mercadopago.client.order.OrderPaymentRequest;
+import com.mercadopago.client.order.OrderTransactionRequest;
 import com.mercadopago.client.payment.PaymentClient;
-import com.mercadopago.client.payment.PaymentCreateRequest;
-import com.mercadopago.client.payment.PaymentPayerRequest;
 import com.mercadopago.client.preference.PreferenceBackUrlsRequest;
 import com.mercadopago.client.preference.PreferenceClient;
 import com.mercadopago.client.preference.PreferenceItemRequest;
@@ -37,6 +41,8 @@ import com.mercadopago.client.preference.PreferenceRequest;
 import com.mercadopago.core.MPRequestOptions;
 import com.mercadopago.exceptions.MPApiException;
 import com.mercadopago.resources.merchantorder.MerchantOrder;
+import com.mercadopago.resources.order.Order;
+import com.mercadopago.resources.order.OrderPayment;
 import com.mercadopago.resources.payment.Payment;
 import com.mercadopago.resources.preference.Preference;
 import com.pulse_gym.lb_common.client.ReportesClient;
@@ -190,6 +196,7 @@ public class PagoService {
 
             MPRequestOptions requestOptions = MPRequestOptions.builder()
                     .accessToken(getAccessTokenValidado())
+                    .customHeaders(Map.of("X-Idempotency-Key", idempotencyKey))
                     .build();
 
             IdentificationRequest identification = IdentificationRequest.builder()
@@ -197,53 +204,77 @@ public class PagoService {
                     .number(requestDTO.getPayerIdentificationNumber())
                     .build();
 
-            PaymentPayerRequest payer = PaymentPayerRequest.builder()
+            OrderPayerRequest payer = OrderPayerRequest.builder()
                     .email(requestDTO.getPayerEmail())
                     .identification(identification)
                     .build();
 
-            PaymentCreateRequest paymentCreateRequest = PaymentCreateRequest.builder()
-                    .transactionAmount(montoFormateado)
+            EnumMetodoPago metodoPagoDetectado = requestDTO.getMetodoPago() != null
+                    ? requestDTO.getMetodoPago()
+                    : mapearMetodoPagoDesdePaymentMethodId(requestDTO.getPaymentMethodId());
+            String tipoTarjeta = metodoPagoDetectado == EnumMetodoPago.TARJETA_DEBITO ? "debit_card" : "credit_card";
+
+            OrderPaymentMethodRequest paymentMethod = OrderPaymentMethodRequest.builder()
+                    .id(requestDTO.getPaymentMethodId())
+                    .type(tipoTarjeta)
                     .token(requestDTO.getToken())
-                    .description("Pulse GYM - Membresia: " + membresiaBase.getNombre())
                     .installments(requestDTO.getInstallments())
-                    .paymentMethodId(requestDTO.getPaymentMethodId())
-                    .issuerId(requestDTO.getIssuerId())
-                    .payer(payer)
-                    .externalReference(socioMembresia.getIdSocioMembresia().toString())
                     .statementDescriptor("PULSEGYM")
-                    .binaryMode(true)
                     .build();
 
-            log.info("-> Enviando petición PaymentClient.create() a Mercado Pago...");
-            PaymentClient paymentClient = new PaymentClient();
-            Payment payment = paymentClient.create(paymentCreateRequest, requestOptions);
+            // Mercado Pago exige el monto en COP sin decimales (ej. "158000", no "158000.00")
+            String montoParaOrdenMp = montoFormateado.setScale(0, RoundingMode.HALF_UP).toPlainString();
 
-            log.info("==================================================================");
-            log.info("=== 📥 RESPUESTA EXITOSA DE MERCADO PAGO API ===");
-            log.info("==================================================================");
-            log.info("-> Payment ID MP: {}", payment.getId());
-            log.info("-> Status: {}", payment.getStatus());
-            log.info("-> Status Detail: {}", payment.getStatusDetail());
-            log.info("-> Payment Method ID: {}", payment.getPaymentMethodId());
-            log.info("-> Statement Descriptor: {}", payment.getStatementDescriptor());
+            OrderPaymentRequest orderPayment = OrderPaymentRequest.builder()
+                    .amount(montoParaOrdenMp)
+                    .paymentMethod(paymentMethod)
+                    .build();
 
-            EnumMetodoPago metodoPagoFinal;
-            if (requestDTO.getMetodoPago() != null) {
-                metodoPagoFinal = requestDTO.getMetodoPago();
-            } else {
-                metodoPagoFinal = mapearMetodoPagoDesdePaymentMethodId(requestDTO.getPaymentMethodId());
+            OrderCreateRequest orderCreateRequest = OrderCreateRequest.builder()
+                    .type("online")
+                    .processingMode("automatic")
+                    .totalAmount(montoParaOrdenMp)
+                    .description("Pulse GYM - Membresia: " + membresiaBase.getNombre())
+                    .externalReference(socioMembresia.getIdSocioMembresia().toString())
+                    .payer(payer)
+                    .transactions(OrderTransactionRequest.builder()
+                            .payments(List.of(orderPayment))
+                            .build())
+                    .build();
+
+            log.info("-> Enviando petición OrderClient.create() a Mercado Pago...");
+            OrderClient orderClient = new OrderClient();
+            Order order = orderClient.create(orderCreateRequest, requestOptions);
+
+            OrderPayment pagoMp = order.getTransactions() != null && order.getTransactions().getPayments() != null
+                    && !order.getTransactions().getPayments().isEmpty()
+                            ? order.getTransactions().getPayments().get(0)
+                            : null;
+
+            if (pagoMp == null) {
+                throw new RuntimeException(
+                        "Mercado Pago creó la orden (ID: " + order.getId() + ") pero no devolvió información del pago.");
             }
+
+            log.info("==================================================================");
+            log.info("=== 📥 RESPUESTA EXITOSA DE MERCADO PAGO API (ORDERS API) ===");
+            log.info("==================================================================");
+            log.info("-> Order ID MP: {}", order.getId());
+            log.info("-> Payment ID MP: {}", pagoMp.getId());
+            log.info("-> Status: {}", pagoMp.getStatus());
+            log.info("-> Status Detail: {}", pagoMp.getStatusDetail());
+
+            EnumMetodoPago metodoPagoFinal = metodoPagoDetectado;
 
             Pago nuevoPago = new Pago();
             nuevoPago.setSocioMembresia(socioMembresia);
             nuevoPago.setMonto(montoFormateado);
             nuevoPago.setFechaPago(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
             nuevoPago.setMetodoPago(metodoPagoFinal);
-            nuevoPago.setPaymentIdMp(String.valueOf(payment.getId()));
-            nuevoPago.setNumeroComprobante("MP-" + payment.getId());
+            nuevoPago.setPaymentIdMp(pagoMp.getId());
+            nuevoPago.setNumeroComprobante("MP-" + pagoMp.getId());
             nuevoPago.setAnulado(false);
-            nuevoPago.setEstado(mapearEstadoPago(payment.getStatus()));
+            nuevoPago.setEstado(mapearEstadoPagoOrdenMp(pagoMp.getStatus()));
 
             pagoRepository.save(nuevoPago);
             log.info("-> Pago local guardado con éxito. ID Local: {}, Estado: {}", nuevoPago.getIdPago(),
@@ -251,24 +282,29 @@ public class PagoService {
 
             String mensaje;
 
-            if ("approved".equalsIgnoreCase(payment.getStatus())) {
+            if ("processed".equalsIgnoreCase(pagoMp.getStatus())) {
                 mensaje = "¡Pago aprobado exitosamente!";
                 enviarEventoPago(nuevoPago);
                 actualizarMembresiaTrasPagoAprobado(socioMembresia);
-            } else if ("in_process".equalsIgnoreCase(payment.getStatus())
-                    || "pending".equalsIgnoreCase(payment.getStatus())) {
+            } else if ("processing".equalsIgnoreCase(pagoMp.getStatus())
+                    || "action_required".equalsIgnoreCase(pagoMp.getStatus())
+                    || "in_review".equalsIgnoreCase(pagoMp.getStatus())
+                    || "created".equalsIgnoreCase(pagoMp.getStatus())) {
                 mensaje = "Tu pago está siendo procesado. Te notificaremos cuando se confirme.";
-            } else if ("rejected".equalsIgnoreCase(payment.getStatus())) {
-                mensaje = "El pago fue rechazado: " + traducirStatusDetail(payment.getStatusDetail());
+            } else if ("failed".equalsIgnoreCase(pagoMp.getStatus())
+                    || "expired".equalsIgnoreCase(pagoMp.getStatus())
+                    || "canceled".equalsIgnoreCase(pagoMp.getStatus())
+                    || "charged_back".equalsIgnoreCase(pagoMp.getStatus())) {
+                mensaje = "El pago fue rechazado: " + traducirStatusDetail(pagoMp.getStatusDetail());
             } else {
-                mensaje = "Estado de pago desconocido: " + payment.getStatus();
+                mensaje = "Estado de pago desconocido: " + pagoMp.getStatus();
             }
 
             return new PagoResultResponseDTO(
                     nuevoPago.getIdPago(),
-                    payment.getStatus(),
-                    payment.getStatusDetail(),
-                    String.valueOf(payment.getId()),
+                    pagoMp.getStatus(),
+                    pagoMp.getStatusDetail(),
+                    pagoMp.getId(),
                     montoFormateado,
                     mensaje);
 
@@ -348,8 +384,9 @@ public class PagoService {
     }
 
     /**
-     * Mapea el estado de Mercado Pago a EnumEstadoPago
-     * 
+     * Mapea el estado de Mercado Pago (Payments API clásica / webhooks) a
+     * EnumEstadoPago
+     *
      * @param mpStatus Estado de MP
      * @return EnumEstadoPago correspondiente
      */
@@ -362,6 +399,32 @@ public class PagoService {
                 return EnumEstadoPago.APROBADO;
             case "rejected":
             case "cancelled":
+                return EnumEstadoPago.RECHAZADO;
+            default:
+                return EnumEstadoPago.PENDIENTE;
+        }
+    }
+
+    /**
+     * Mapea el estado de un pago dentro de una Orden (Orders API,
+     * usada por procesarPagoConTokenApp) a EnumEstadoPago. La Orders API usa un
+     * vocabulario de estados distinto al de la Payments API clásica
+     * (processed/failed/action_required en vez de approved/rejected/pending).
+     *
+     * @param mpStatus Estado del pago dentro de la orden
+     * @return EnumEstadoPago correspondiente
+     */
+    private EnumEstadoPago mapearEstadoPagoOrdenMp(String mpStatus) {
+        if (mpStatus == null) {
+            return EnumEstadoPago.PENDIENTE;
+        }
+        switch (mpStatus.toLowerCase()) {
+            case "processed":
+                return EnumEstadoPago.APROBADO;
+            case "failed":
+            case "expired":
+            case "canceled":
+            case "charged_back":
                 return EnumEstadoPago.RECHAZADO;
             default:
                 return EnumEstadoPago.PENDIENTE;
